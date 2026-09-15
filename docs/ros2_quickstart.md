@@ -68,6 +68,17 @@ ros2 topic list
 
 > **用語**: 「トピック」は、プログラム同士がデータを流し合う通り道の名前です。
 
+### ⚠️ この先ずっと出てくる、無視してよいメッセージ
+
+ROS 2 のコマンドを打つたびに、こういう行が混ざります。
+
+```
+selected interface "lo" is not multicast-capable: disabling multicast
+```
+
+**これはエラーではありません。** `docker-compose.yml` で `ROS_LOCALHOST_ONLY=1`（通信をコンテナ内に限定）を設定しているため、
+「外部に向けた通信を使わないようにしました」と報告しているだけです。**毎回出ますが正常なので無視してください。**
+
 ---
 
 ## 4. ROS 2 の基本を体で覚える（turtlesim）
@@ -178,6 +189,16 @@ ros2 launch nav2_bringup tb3_simulation_launch.py headless:=False
 | Gazebo がカクつく | `LIBGL_ALWAYS_SOFTWARE=1` で CPU 描画しているため正常です |
 
 ---
+
+## 検証済みの動作（この手順は実機で確認済みです）
+
+以下はコマンドライン上で動作確認済みです。**あなたが確認する必要があるのは「ウィンドウが実際に画面に出るか」だけ**です。
+
+- `colcon build` が通り、`ros2 pkg executables agv_main` に `auto_drive` が出る
+- `ros2 run agv_main auto_drive` が `/cmd_vel` に指令を流す（前進→旋回→後退→停止）
+- Nav2 一式が起動し、ロボットが Gazebo 内に生成され、`/odom` `/scan` `/map` `/amcl_pose` が publish される
+- X サーバへの接続が通り、OpenGL（llvmpipe によるソフトウェア描画）が動作する
+- `waffle_pi` のカメラトピックが `/camera/image_raw` と `/camera/camera_info` で出る（次段階のマーカー認識で使う）
 
 ## この環境の設定について
 

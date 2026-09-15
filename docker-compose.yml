@@ -64,7 +64,13 @@ services:
       # waffle_pi は実機 TurtleBot3 Waffle Pi とトピック名が一致するので、
       # シミュレータで書いたコードがそのまま実機に載る。
       - TURTLEBOT3_MODEL=waffle_pi
-      - GAZEBO_MODEL_PATH=/opt/ros/humble/share/turtlebot3_gazebo/models:/workspace/ros2_ws/src/agv_main/models
+      # 先頭の /usr/share/gazebo-11/models は必須。
+      # ground_plane と sun という基本モデルがここにあり、これを外すと
+      # Gazebo がモデルをインターネットから取得しようとして起動しなくなる。
+      - GAZEBO_MODEL_PATH=/usr/share/gazebo-11/models:/opt/ros/humble/share/turtlebot3_gazebo/models:/workspace/ros2_ws/src/agv_main/models
+      # モデルのオンライン取得を無効化する。必要なモデルは上のパスに全部あるので、
+      # 取りに行かせない方が起動が速く、オフラインでも確実に動く。
+      - GAZEBO_MODEL_DATABASE_URI=
 
     volumes:
       - ./edge_ai/ros2_ws:/workspace/ros2_ws
