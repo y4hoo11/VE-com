@@ -19,7 +19,7 @@ Docker Desktop の **Settings → General → "Use the WSL 2 based engine" が O
 
 PowerShell でも Git Bash でも構いません。
 
-```
+```shell
 cd C:\Users\<あなたのユーザー名>\myapps\VE-con
 docker compose up -d --build
 ```
@@ -32,7 +32,7 @@ docker compose up -d --build
 
 ## 2. 画面が出るか確認（最重要。ここが通らないと先はない）
 
-```
+```shell
 docker exec -it ve_con_ros2 bash
 ```
 
@@ -72,7 +72,7 @@ ros2 topic list
 
 ROS 2 のコマンドを打つたびに、こういう行が混ざります。
 
-```
+```text
 selected interface "lo" is not multicast-capable: disabling multicast
 ```
 
@@ -86,21 +86,27 @@ selected interface "lo" is not multicast-capable: disabling multicast
 いきなり本番に行くと迷子になります。一番小さい題材で概念を掴みます。
 
 ターミナル1（今のまま）:
+
 ```bash
 ros2 run turtlesim turtlesim_node
 ```
+
 **見えるもの**: 青い画面に亀が1匹いるウィンドウ。
 
 ターミナル2（`docker exec -it ve_con_ros2 bash` で新しく入る）:
+
 ```bash
 ros2 run turtlesim turtle_teleop_key
 ```
+
 **見えるもの**: 矢印キーで亀が動く。
 
 ターミナル3:
+
 ```bash
 ros2 topic echo /turtle1/cmd_vel
 ```
+
 この状態でターミナル2で矢印キーを押します。
 
 **見えるもの**: `linear: x: 2.0` `angular: z: 0.0` のような数値が流れる。
@@ -153,6 +159,7 @@ ros2 launch nav2_bringup tb3_simulation_launch.py headless:=False
 起動ファイルを自分で書く必要はありません。
 
 **見えるもの**: ウィンドウが2つ。
+
 - **Gazebo** … 3Dの部屋の中にロボットがいる
 - **RViz2** … 上から見た地図と、ロボットのレーザーの点
 
@@ -179,7 +186,7 @@ ros2 launch nav2_bringup tb3_simulation_launch.py headless:=False
 ## 困ったときの対処
 
 | 症状 | 対処 |
-|---|---|
+| --- | --- |
 | `xeyes` が出ない | Docker Desktop が WSL2 バックエンドか確認 → Docker Desktop を再起動 |
 | 初回ビルドが終わらない | 15〜25分かかります。失敗ではありません |
 | `Package not found` | 新しいターミナルごとに `source /workspace/ros2_ws/install/setup.bash` が必要 |
