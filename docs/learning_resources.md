@@ -7,17 +7,59 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 
 ---
 
+## 前提：「Humble」とは何か（バージョンの名前）
+
+ROS 2 は **1年に1回、5月に新しいバージョン**が出る。数字ではなく**アルファベット順の名前**が付く。
+
+```text
+Foxy(F) → Galactic(G) → Humble(H) → Iron(I) → Jazzy(J) → Kilted(K) → …
+                        ↑ これを使っている
+```
+
+| 名前 | リリース | サポート期限 | Ubuntu |
+| --- | --- | --- | --- |
+| Foxy Fitzroy | 2020年5月 | 終了済み | 20.04 |
+| **Humble Hawksbill** | **2022年5月** | **2027年5月** | **22.04** |
+| Iron Irwini | 2023年5月 | 終了済み | 22.04 |
+| Jazzy Jalisco | 2024年5月 | 2029年5月 | 24.04 |
+| Kilted Kaiju | 2025年5月 | 短期（非LTS） | 24.04 |
+
+**偶数年に出るものが LTS（長期サポート）**で約5年、奇数年のものは1年半で終わる。
+ROS 2 の各バージョンは、**Ubuntu の特定バージョンと1対1で紐づく**（Humble なら Ubuntu 22.04）。
+
+### なぜ Humble を使っているか
+
+1. `Dockerfile` のベースが `osrf/ros:humble-desktop`
+2. **LTS で 2027年5月まで持つ** → 2027年1月の発表まで確実に安全
+3. LTS かつ普及しているため、**日本語を含めて情報量が一番多い**
+
+### なぜ気にする必要があるか
+
+**バージョンが違うと、コマンド・API・パッケージの有無が変わる。**
+ネットの記事をそのまま試して動かないとき、たいていバージョン違いが原因。
+
+- 公式ドキュメントは URL に **`/humble/`** が入っているか確認する
+- Qiita / Zenn の記事は冒頭のバージョン表記を見る（Foxy や Jazzy の記事は要注意）
+- `ros2 --version` や `echo $ROS_DISTRO` でコンテナ内のバージョンを確認できる
+
+> 概念（ノード・トピック・tf・Nav2 の考え方）はバージョンをまたいでほぼ同じなので、
+> **解説記事としては他バージョンでも十分役に立つ。** 詰まるのはコマンドの細かい書き方のところ。
+
+参考: [Distributions — ROS 2 Documentation](https://docs.ros.org/en/humble/Releases.html) / [ROS 2 | endoflife.date](https://endoflife.date/ros-2)
+
+---
+
 ## レイヤー0：ROS とは何か（全体像をつかむ）
 
 > **分かること**: なぜ ROS を使うのか。ロボット開発における位置づけ。
 
-### 簡易版
+### 簡易版：ROS とは何か
 
 - [５分でワカル!? ROSとはなにか](https://docs.google.com/presentation/d/1BZU3nFDiSrUU7wAMpqgY4kU6-65wxzvfHVRZigsHlDI/edit) — ROS Japan UG のスライド。最初の1本
 - [ROSでできること、ツールなどの説明（FANUC）](https://www.fanuc.co.jp/ja/product/robot/academia/5min-basics/what-is-ros.html) — 制作概要.md にも載っている解説
 - [ROS 2の初学者向け資料まとめ（Qiita）](https://qiita.com/koichi_baseball/items/b15783ced5df8d5e56a6) — **日本語資料の総index。2024年10月更新。迷ったらここから辿る**
 
-### 公式版
+### 公式版：ROS とは何か
 
 - [ROS 2 Documentation: Humble](https://docs.ros.org/en/humble/index.html) — **このプロジェクトのバージョンは Humble。他バージョンの記事はAPIが違うことがあるので注意**
 
@@ -28,13 +70,13 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 > **分かること**: 手順4の turtlesim で見た構造。ノードが互いを知らずにデータをやり取りする仕組み。
 > **通信の4形式**: トピック（一方向・非同期）／サービス（双方向・同期）／アクション（時間のかかる依頼）／パラメータ。
 
-### 簡易版
+### 簡易版：ノードとトピック
 
 - [ROS 2 Humble 公式チュートリアル 01: 環境構築から turtlesim まで](https://yusukekato.jp/html/2023/0910.html/) — **手順4でやったことの解説そのもの**
 - [ROS 2 Humble 公式チュートリアル 02: ノード関係のコマンド](https://yusukekato.jp/html/2023/0913.html)
 - [ROS 2 Jazzy公式チュートリアル02: ノードとトピックについて](https://yusukekato.jp/html/2024/0927.html/) — Jazzy版だが概念は同じ
 
-### 公式版
+### 公式版：ノードとトピック
 
 - [Understanding nodes](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Nodes/Understanding-ROS2-Nodes.html)
 - [Understanding topics](https://docs.ros.org/en/humble/Tutorials/Beginner-CLI-Tools/Understanding-ROS2-Topics/Understanding-ROS2-Topics.html)
@@ -47,13 +89,13 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 > **分かること**: なぜ `map` `odom` `base_link` の3つがあるのか。
 > 手順6で出た `Invalid frame ID "odom"` が何を意味していたか。
 
-### 簡易版
+### 簡易版：座標変換 tf2
 
 - [ROSの座標変換TFについて](https://memo.soarcloud.com/ros%E3%81%AE%E5%BA%A7%E6%A8%99%E5%A4%89%E6%8F%9Btf%E3%81%AB%E3%81%A4%E3%81%84%E3%81%A6/) — TF の考え方（ツリー構造、broadcaster と listener）
 - [ナビゲーションにおける自己位置推定](https://www.yokoido.com/post/self-position_estimation) — AMCL が何をしているか
 - [odomフレームなしでNav2を動かす（Qiita）](https://qiita.com/porizou1/items/62f7b2a306769b0e3ad9) — 逆から理解する用。odom の役割がはっきりする
 
-### 公式版
+### 公式版：座標変換 tf2
 
 - [tf2 Tutorials](https://docs.ros.org/en/humble/Tutorials/Intermediate/Tf2/Tf2-Main.html)
 - [Nav2: Setting Up Transformations](https://docs.nav2.org/setup_guides/transformation/setup_transforms.html) — **Nav2 が要求する座標変換の要件。実機を繋ぐときに必読**
@@ -66,7 +108,7 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 > **分かること**: `Nav2 Goal` を1回クリックしただけで内部で何が起きているか。
 > 11個のノード（planner / controller / costmap / behavior / bt_navigator …）の役割分担。
 
-### 簡易版
+### 簡易版：Nav2
 
 - [【ライブラリ#1】Nav2（Qiita）](https://qiita.com/erina_mori/items/65c137670c6ed3ab8e41) — Nav2 の概要とパッケージ構成。**まずこれ**
 - [ROS 2においてNavigation2を用いた自動走行を行う方法（Qiita）](https://qiita.com/kccs_mitsuhiro-teraoka/items/7861b938df96b2b599a3) — 手順6でやった RViz 操作の解説
@@ -74,7 +116,7 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 - [Navigation2を使ってロボットを動的な目的地に向かわせる（Qiita）](https://qiita.com/sfc_nakanishi_lab/items/028edb3a7d5ed0300e33) — **`marker_decider` でやりたいことに一番近い記事**
 - [ROS入門 (50) - Nav2のデモの実行（note）](https://note.com/npaka/n/nc94ecd675b96)
 
-### 公式版
+### 公式版：Nav2
 
 - [Nav2 Documentation](https://docs.nav2.org/) — トップ
 - [Navigate To Pose（Behavior Tree）](https://docs.nav2.org/behavior_trees/trees/nav_to_pose_recovery.html) — 目標を受けてから走るまでの流れ
@@ -86,12 +128,12 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 
 > **分かること**: `auto_drive.py` の構造。あなたが `marker_decider.py` を書くときの型。
 
-### 簡易版
+### 簡易版：ノードを書く
 
 - [How To Write a ROS2 Publisher and Subscriber (Python)](https://automaticaddison.com/how-to-write-a-ros2-publisher-and-subscriber-python-foxy/) — 図が多く分かりやすい（Foxy版だが Humble でもほぼ同じ）
 - 手元の `edge_ai/ros2_ws/src/agv_main/agv_main/auto_drive.py` — **50行。実際に動く教材として一番良い**
 
-### 公式版
+### 公式版：ノードを書く
 
 - [Writing a simple publisher and subscriber (Python)](https://docs.ros.org/en/humble/Tutorials/Beginner-Client-Libraries/Writing-A-Simple-Py-Publisher-And-Subscriber.html) — **`auto_drive.py` はこれとほぼ同じ形**
 - [Writing an action client (Python)](https://docs.ros.org/en/humble/Tutorials/Intermediate/Writing-an-Action-Server-Client/Py.html) — Nav2 に目標を送る仕組みの下地
@@ -105,13 +147,13 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 > **分かること**: カメラでマーカーを読み、ID・距離・角度を得る仕組み。
 > **ライセンス**: OpenCV は Apache-2.0、`aruco_opencv` は MIT。どちらも制約の緩いもの。
 
-### 簡易版
+### 簡易版：マーカー認識
 
 - [ArUco Marker Detection: Pose Estimation with OpenCV Python](https://zbotic.in/aruco-marker-detection-pose-estimation-with-opencv-python/)
 - [How to Perform Pose Estimation Using an ArUco Marker](https://automaticaddison.com/how-to-perform-pose-estimation-using-an-aruco-marker/) — 手順が丁寧
 - [How to Set Up ArUco Marker Tracking on a ROS Robot（Fictionlab）](https://docs.fictionlab.pl/integrations/software/aruco-tracking) — **導入した `aruco_opencv` の作者による解説**
 
-### 公式版
+### 公式版：マーカー認識
 
 - [OpenCV: Detection of ArUco Markers](https://docs.opencv.org/4.x/d5/dae/tutorial_aruco_detection.html) — 検出アルゴリズムの本体
 - [aruco_opencv - ROS Package Overview](https://index.ros.org/p/aruco_opencv/) — パッケージ仕様とトピック定義
@@ -131,13 +173,13 @@ VE-com の AI担当（ROS 2 / マーカー認識 / 通信）が理解を進め�
 > **分かること**: ROS 2 側の判断結果を配車サーバへ渡す仕組み。
 > ROS 2 のトピックと発想が似ている（publish / subscribe）ので、対比で理解すると早い。
 
-### 簡易版
+### 簡易版：通信
 
 - [【初心者向け】MQTTの基本を解説](https://start-electronics.com/electronics/soft/mqtt/)
 - [IoT初心者向け！「MQTT」について簡単にまとめてみる（ラクス）](https://tech-blog.rakus.co.jp/entry/20180912/mqtt/iot/beginner)
 - [IoT時代を支えるプロトコル「MQTT」（CodeZine）](https://codezine.jp/article/detail/8019) — もう少し踏み込んだ解説
 
-### 公式版
+### 公式版：通信
 
 - [Eclipse Paho Python Client](https://eclipse.dev/paho/index.php?page=clients/python/index.php) — 導入済みの `python3-paho-mqtt` の公式
 - [MQTT Version 3.1.1 仕様（OASIS）](https://docs.oasis-open.org/mqtt/mqtt/v3.1.1/mqtt-v3.1.1.html)
