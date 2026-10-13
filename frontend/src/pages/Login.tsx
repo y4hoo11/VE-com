@@ -14,6 +14,7 @@ import { useAuth } from '../context/AuthContext';
 import { AUTH_CONFIG, MOCK_ACCOUNTS } from '../config/Auth';
 import type { AuthResult } from '../types/Auth';
 import '../styles/login.css';
+import '../styles/login-dark.css';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();

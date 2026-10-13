@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Control } from './pages/Control';
 import { TaskOnly } from './pages/Task';
+import { SettingCarousel } from './components/setting/SettingCarousel'; // 設定画面コンポーネントをインポート
 import './App.css';
 
 const Dashboard: React.FC = () => {
@@ -37,6 +38,7 @@ const Dashboard: React.FC = () => {
         <Routes>
           <Route path="/control" element={<Control />} />
           <Route path="/tasks" element={<TaskOnly />} />
+          <Route path="/settings" element={<SettingCarousel />} /> {/* 設定画面のルート定義を追加 */}
           <Route path="*" element={<Control />} />
         </Routes>
       </main>
@@ -69,6 +71,15 @@ const Dashboard: React.FC = () => {
               className={`nav-btn ${location.pathname === '/tasks' ? 'active' : ''}`}
             >
               📋 タスク表示専用
+            </button>
+
+            {/* タスク表示専用ボタンの下に追加した設定ボタン */}
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className={`nav-btn ${location.pathname === '/settings' ? 'active' : ''}`}
+            >
+              ⚙️ 設定
             </button>
           </div>
         )}

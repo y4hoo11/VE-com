@@ -1,0 +1,114 @@
+/* =====================================================================
+   login-dark.css
+   ---------------------------------------------------------------------
+   ログイン画面のダークモード対応。既存の login.css の「後」に読み込む。
+
+   使い方(Login.tsx):
+     import '../styles/login.css';
+     import '../styles/login-dark.css';   // ← この1行を追加
+
+   ダークになる条件(どれか1つでOK):
+     1. OSのダークモード設定 (prefers-color-scheme: dark)
+     2. <html data-theme="dark"> または <html class="dark">
+        (アプリ側にテーマ切り替えボタンがある場合はこちらで制御できる)
+   強制的にライトにしたい場合は <html data-theme="light"> を付ける。
+
+   配色は --lg-* の変数に集約してあるので、色を変えたい時はここだけ編集する。
+===================================================================== */
+
+/* ---- ライト(元のデザインと同じ配色) ---- */
+.login-screen {
+  color-scheme: light;
+  --lg-card-bg: #6e6e6e;
+  --lg-accent: #6fcf43;
+  --lg-text: #161616;
+  --lg-surface: #ffffff;        /* 入力欄・ボタンの背景 */
+  --lg-surface-text: #161616;   /* 入力欄・ボタンの文字色 */
+  --lg-surface-border: transparent;
+  --lg-placeholder: #9a9a9a;
+  --lg-error: #ff6b6b;
+}
+
+/* ---- ダーク ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not(.light) .login-screen {
+    color-scheme: dark;
+    --lg-card-bg: #26262a;
+    --lg-accent: #6fcf43;
+    --lg-text: #f2f2f2;
+    --lg-surface: #1a1a1d;
+    --lg-surface-text: #f2f2f2;
+    --lg-surface-border: #4a4a52;
+    --lg-placeholder: #8a8a93;
+    --lg-error: #ff7a7a;
+  }
+}
+
+:is([data-theme="dark"], .dark) .login-screen {
+  color-scheme: dark;
+  --lg-card-bg: #26262a;
+  --lg-accent: #6fcf43;
+  --lg-text: #f2f2f2;
+  --lg-surface: #1a1a1d;
+  --lg-surface-text: #f2f2f2;
+  --lg-surface-border: #4a4a52;
+  --lg-placeholder: #8a8a93;
+  --lg-error: #ff7a7a;
+}
+
+/* ---- 上の変数を各パーツに適用 ---- */
+.login-screen .login-card {
+  background: var(--lg-card-bg);
+}
+
+.login-screen .stripe {
+  background: var(--lg-accent);
+}
+
+.login-screen .logo-accent {
+  color: var(--lg-accent);
+}
+
+.login-screen .logo-rest,
+.login-screen .field,
+.login-screen .field-label,
+.login-screen .bracket {
+  color: var(--lg-text);
+}
+
+/* 入力欄: 背景だけでなく文字色も必ず指定する
+   (未指定だとOSのダーク設定で文字が白くなり、白背景だと読めなくなる) */
+.login-screen .field-input {
+  background: var(--lg-surface);
+  color: var(--lg-surface-text);
+  caret-color: var(--lg-surface-text);
+  border: 1px solid var(--lg-surface-border);
+}
+
+.login-screen .field-input::placeholder {
+  color: var(--lg-placeholder);
+}
+
+/* ブラウザの自動入力(オートフィル)で水色背景になるのを防ぐ */
+.login-screen .field-input:-webkit-autofill,
+.login-screen .field-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--lg-surface-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--lg-surface) inset;
+  caret-color: var(--lg-surface-text);
+}
+
+.login-screen .field-input:focus-visible,
+.login-screen .login-button:focus-visible {
+  outline: 2px solid var(--lg-accent);
+  outline-offset: 2px;
+}
+
+.login-screen .login-button {
+  background: var(--lg-surface);
+  color: var(--lg-surface-text);
+  border: 1px solid var(--lg-surface-border);
+}
+
+.login-screen .error-message {
+  color: var(--lg-error);
+}
