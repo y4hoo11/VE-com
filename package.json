@@ -4,14 +4,20 @@
   "private": true,
   "workspaces": [
     "backend",
-    "frontend",
-    "packages/*"
+    "frontend"
   ],
   "scripts": {
-    "dev:backend": "npm run dev --workspace=backend",
-    "dev:frontend": "npm run dev --workspace=frontend",
-    "dev": "npm run dev:backend & npm run dev:frontend",
+    "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "build": "npm run build --workspaces",
-    "prisma:generate": "npm run prisma generate --workspace=backend"
+    "prisma:generate": "npx prisma generate --schema=backend/prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "esbuild@0.28.2": true
   }
 }
