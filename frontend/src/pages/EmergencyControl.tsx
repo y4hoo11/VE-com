@@ -187,7 +187,7 @@ export const EmergencyBrake: React.FC<Props> = ({ selectedVehicle, onBack }) => 
             </div>
 
             <div className="wasd-controller">
-              <p className="wasd-title">🎮 走行操作 (WASDキー)</p>
+              <p className="wasd-title"> 走行操作 (WASDキー)</p>
               <div className="wasd-keys">
                 <div className={`key-cap key-w ${activeKeys.w ? 'active' : ''}`}>W</div>
                 <div className="wasd-row">
@@ -203,13 +203,13 @@ export const EmergencyBrake: React.FC<Props> = ({ selectedVehicle, onBack }) => 
           <div className="side-panel">
             <div className="around-sensor-card">
               <div className="sensor-card-header">
-                <h3 className="section-title">📡 クリアランスソナー (アラウンドビュー)</h3>
+                <h3 className="section-title">物理センサー (アラウンドビュー)</h3>
                 <button
                   type="button"
                   className={`demo-toggle-btn ${isDemoMode ? 'active' : ''}`}
                   onClick={() => setIsDemoMode(!isDemoMode)}
                 >
-                  {isDemoMode ? 'デモ動作中 🔄' : 'デモ再開 ▶'}
+                  {isDemoMode ? 'デモ動作中 ' : 'デモ再開 ▶'}
                 </button>
               </div>
 
@@ -246,9 +246,9 @@ export const EmergencyBrake: React.FC<Props> = ({ selectedVehicle, onBack }) => 
                 {/* 下部ステータス表示 */}
                 <div className="meter-footer-status">
                   {hasDanger ? (
-                    <span className="status-alert-red">⚠️ 接近警告！障害物を検知しました</span>
+                    <span className="status-alert-red">接近警告</span>
                   ) : (
-                    <span className="status-ok">周囲クリアランス 正常検知中</span>
+                    <span className="status-ok">センサー稼働中</span>
                   )}
                 </div>
               </div>
