@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { EmergencyBrake } from './pages/EmergencyControl';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Control } from './pages/Control';
@@ -38,7 +39,19 @@ const Dashboard: React.FC = () => {
         <Routes>
           <Route path="/control" element={<Control />} />
           <Route path="/tasks" element={<TaskOnly />} />
-          <Route path="/settings" element={<SettingCarousel />} /> {/* 設定画面のルート定義を追加 */}
+          <Route path="/settings" element={<SettingCarousel />} /> {/* 設定画面のルート定義 */}
+          
+          {/* ★追加：緊急制御画面へのルーティング定義 */}
+          <Route 
+            path="/emergency/:id" 
+            element={
+              <EmergencyBrake 
+                selectedVehicle={{ id: '1', name: '車両1', status: '稼働中' }} 
+                onBack={() => navigate('/control')} 
+              />
+            } 
+          />
+
           <Route path="*" element={<Control />} />
         </Routes>
       </main>
@@ -54,6 +67,7 @@ const Dashboard: React.FC = () => {
           {isNavOpen ? '▼ 画面選択を閉じる' : '▲ 画面選択を開く'}
         </button>
 
+        {/* 開閉するパネル本体 */}
         {/* 開閉するパネル本体 */}
         {isNavOpen && (
           <div className="nav-panel">

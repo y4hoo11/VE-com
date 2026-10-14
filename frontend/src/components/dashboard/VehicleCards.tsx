@@ -1,5 +1,6 @@
 import React from 'react';
 import type { Vehicle } from '../../types';
+import { useNavigate } from 'react-router-dom';
 import styles from '../../styles/VehicleCards.module.css';
 
 type VehicleCardsProps = {
@@ -26,6 +27,7 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
   onSelectVehicle,
   onAcknowledgeEmergency,
 }) => {
+  const navigate = useNavigate();
   return (
     <div className={styles.container}>
       {vehicles.map((v) => {
@@ -58,11 +60,14 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
             {/* 行2: 詳細ボタン / 緊急詳細 */}
             <button
               type="button"
-              onClick={() => onSelectVehicle(v.id)}
+              onClick={() => {
+                navigate(`/emergency/${v.id}`); // ★画面遷移を実行
+                onSelectVehicle(v.id);
+              }}
               className={styles.detailButton}
             >
               車両詳細
-              <span className={styles.detailButtonSub}>(詳細画面へ)</span>
+              <span className={styles.detailButtonSub}></span>
             </button>
 
             <div className={styles.emergencyInfo}>
@@ -88,4 +93,5 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
       })}
     </div>
   );
-};
+
+}; 
