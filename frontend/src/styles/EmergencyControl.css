@@ -185,3 +185,96 @@
   color: #1890ff;
   border: 1px solid #91d5ff;
 }
+/* ===================================================
+   車載メーター風クリアランスソナー（SVGアークスタイル）
+=================================================== */
+.meter-display-area {
+  position: relative;
+  background: #000000;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  min-height: 290px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.sonar-svg-layer {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* 中央の車両本体（縦向き上面図） */
+.car-vertical-body {
+  position: relative;
+  width: 58px;
+  height: 100px;
+  background: #1f2937;
+  border: 2px solid #9ca3af;
+  border-radius: 14px;
+  z-index: 5;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+  transition: all 0.3s;
+}
+
+.car-vertical-body.danger-body {
+  border-color: #ef4444;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+.windshield-v {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 10px;
+  background: #38bdf8;
+  opacity: 0.7;
+}
+
+.windshield-v.front-v {
+  top: 14px;
+  border-radius: 4px 4px 1px 1px;
+}
+
+.windshield-v.rear-v {
+  bottom: 14px;
+  border-radius: 1px 1px 4px 4px;
+}
+
+/* 危険レベルのSVG点滅アニメーション */
+.svg-danger-pulse {
+  animation: svg-pulse 0.5s infinite alternate;
+}
+
+@keyframes svg-pulse {
+  from {
+    stroke-width: 6;
+    opacity: 0.5;
+  }
+  to {
+    stroke-width: 8;
+    opacity: 1;
+  }
+}
+
+.meter-footer-status {
+  position: absolute;
+  bottom: 10px;
+  z-index: 10;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.status-alert-red {
+  color: #f87171;
+  animation: blink-text 0.8s infinite;
+}
+
+.status-ok {
+  color: #6b7280;
+}
