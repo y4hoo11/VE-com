@@ -1,34 +1,44 @@
 /**
  * @file index.ts
- * @description アプリケーション全体で使用する共通の型定義
+ * @description フロントエンド・バックエンド共通型定義
  */
 
-// タスクの型定義
-export interface Task {
+// 1. Backend側のPrisma生成型・Enumをそのまま利用
+export type {
+  User,
+  Vehicle,
+  Task,
+  VehicleLog,
+  TaskHistory,
+  SystemSetting,
+} from '@prisma/client';
+
+export {
+  Role,
+  VehicleStatus,
+  TaskStatus,
+  LogLevel,
+  SettingCategory,
+} from '@prisma/client';
+
+// 2. WebSocket通信用などのリアルタイム更新用ペイロード型定義
+export interface VehicleUpdatePayload {
   id: string;
-  code: string;        // 例: 'TASK-01'
-  name: string;        // 例: '搬送タスク'
-  progress: number;    // 進捗率 (0 ~ 100)
-  quantity: number;    // 個数
-  priority?: number;   // 優先度
-  createdAt: string;   // 追加した日 (例: '2026-06-07')
-  dueDate?: string;    // 期限 (例: '2026-06-10')
+  name?: string;
+  status?: import('@prisma/client').VehicleStatus;
+  batteryLevel?: number | null;
+  currentX?: number | null;
+  currentY?: number | null;
+  currentTheta?: number | null;
+  currentMapId?: string | null;
+  emergencyReason?: string | null;
 }
 
-// 車両（AGV）の型定義
-export interface Vehicle {
-  id: string;
-  name: string;
-  status?: string;
-  battery: number | null;
-  task: string | string[] | null;
-  emergency: string | null;
-}
-
-// 通知・ログの型定義
-export interface LogEntry {
-  id: number;
+export interface LogPayload {
+  id: string; // BigIntのシリアライズ処理後のためstring
+  vehicleId?: string;
+  level: import('@prisma/client').LogLevel;
   message: string;
-  level: 'info' | 'emergency';
-  time: string;
+  details?: Record<string, unknown>;
+  timestamp: string;
 }
