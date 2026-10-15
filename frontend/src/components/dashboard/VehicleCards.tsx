@@ -3,7 +3,6 @@ import { api } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import styles from '../../styles/VehicleCards.module.css';
 
-const Navigate = useNavigate();
 export interface VehicleItem {
   id: string;
   name: string;
@@ -31,6 +30,9 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
   onAcknowledgeEmergency,
 }) => {
   const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
+  
+  // ★ useNavigate はコンポーネント関数の中に移動（慣例として小文字の navigate を使用）
+  const navigate = useNavigate();
 
   // データベースから車両一覧を取得
   const fetchVehicles = async () => {
@@ -81,7 +83,7 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
             <button
               type="button"
               onClick={() => {
-                Navigate(`/emergency/${v.id}`); // ★画面遷移を実行
+                navigate(`/emergency/${v.id}`); // ★画面遷移を実行
                 onSelectVehicle(v.id);
               }}
               className={styles.detailButton}
@@ -110,5 +112,4 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
       })}
     </div>
   );
-
-}; 
+};
