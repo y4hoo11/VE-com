@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { useNavigate } from 'react-router-dom';
 import styles from '../../styles/VehicleCards.module.css';
 
+const Navigate = useNavigate();
 export interface VehicleItem {
   id: string;
   name: string;
@@ -79,7 +81,7 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
             <button
               type="button"
               onClick={() => {
-                navigate(`/emergency/${v.id}`); // ★画面遷移を実行
+                Navigate(`/emergency/${v.id}`); // ★画面遷移を実行
                 onSelectVehicle(v.id);
               }}
               className={styles.detailButton}
