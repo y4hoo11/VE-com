@@ -1,17 +1,28 @@
 /**
  * @file TaskPanel.tsx
- * @description タスク表示・管理パネルコンポーネント。
+ * @description バックエンドDBと連携するタスク表示・管理パネルコンポーネント。
  */
 
 import React, { useState, useEffect } from 'react';
-import type { Task } from '../../types';
-import { getStoredTasks, addStoredTask, deleteStoredTask, subscribeTasks } from '../../services/taskStorage.ts';
+import { api } from '../../services/api';
 import styles from '../../styles/TaskPanel.module.css';
+
+// バックエンドの Prisma モデルに合わせた Task 型の定義
+export interface TaskItem {
+  id: string;
+  title: string;       // name ではなく title に対応
+  startLocation?: string;
+  targetLocation?: string;
+  quantity?: number;   // 必要に応じてバックエンド側に追加またはそのまま
+  priority: number;
+  status: string;
+  createdAt: string;
+}
 
 type PanelMode = 'normal' | 'add' | 'delete';
 
 export const TaskPanel: React.FC = () => {
-  const [tasks, setTasks] = useState<Task[]>(getStoredTasks);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [iconPosition, setIconPosition] = useState<'top' | 'bottom'>('top');
   const [mode, setMode] = useState<PanelMode>('normal');
   const [showSettings, setShowSettings] = useState<boolean>(false);
@@ -22,35 +33,58 @@ export const TaskPanel: React.FC = () => {
   const [newTaskPriority, setNewTaskPriority] = useState<number>(1);
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
 
-  // 変更のリアルタイム同期（複数パネル間・外部同期）
+  // データベースからタスク一覧を取得 (GET)
+  const fetchTasks = async () => {
+    try {
+      const response = await api.get<TaskItem[]>('/tasks');
+      setTasks(response.data);
+    } catch (error) {
+      console.error('タスクの取得に失敗しました:', error);
+    }
+  };
+
   useEffect(() => {
-    const unsubscribe = subscribeTasks((updatedTasks) => {
-      setTasks(updatedTasks);
-    });
-    return () => unsubscribe();
+    fetchTasks();
+    // リアルタイム性を高めるためのポーリング（または Socket.io 連携）
+    const interval = setInterval(fetchTasks, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  // 追加処理
-  const handleCreateTask = (e?: React.FormEvent) => {
+  // 追加処理 (POST)
+  const handleCreateTask = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!newTaskName.trim()) return;
 
-    addStoredTask({
-      name: newTaskName,
-      quantity: newTaskQuantity,
-      priority: newTaskPriority,
-      dueDate: newTaskDueDate || undefined,
-    });
+    try {
+      await api.post('/tasks', {
+        title: newTaskName,          // バックエンドが受け取るフィールド名
+        startLocation: 'Dock-A',     // デフォルトまたはフォームの入力値
+        targetLocation: 'Station-1', // デフォルトまたはフォームの入力値
+        priority: newTaskPriority,
+      });
 
-    setNewTaskName('');
-    setNewTaskQuantity(1);
-    setNewTaskPriority(1);
-    setNewTaskDueDate('');
+      // フォームをリセットして一覧を再取得
+      setNewTaskName('');
+      setNewTaskQuantity(1);
+      setNewTaskPriority(1);
+      setNewTaskDueDate('');
+      setMode('normal');
+      fetchTasks();
+    } catch (error) {
+      console.error('タスクの作成に失敗しました:', error);
+      alert('タスクの保存に失敗しました');
+    }
   };
 
-  // 削除処理
-  const handleDeleteTask = (id: string) => {
-    deleteStoredTask(id);
+  // 削除処理 (DELETE)
+  const handleDeleteTask = async (id: string) => {
+    try {
+      await api.delete(`/tasks/${id}`);
+      fetchTasks();
+    } catch (error) {
+      console.error('タスクの削除に失敗しました:', error);
+      alert('タスクの削除に失敗しました');
+    }
   };
 
   return (
@@ -156,7 +190,7 @@ export const TaskPanel: React.FC = () => {
 
       {/* メイン表示エリア */}
       <div className={styles.mainContent}>
-        <h3 className={styles.title}>タスク管理</h3>
+        <h3 className={styles.title}>タスク管理 (DB連携)</h3>
 
         {/* 追加モード */}
         {mode === 'add' && (
@@ -202,7 +236,7 @@ export const TaskPanel: React.FC = () => {
             </div>
 
             <button type="submit" className={styles.addButton}>
-              タスクを追加
+              データベースにタスクを追加
             </button>
           </form>
         )}
@@ -213,12 +247,11 @@ export const TaskPanel: React.FC = () => {
             <div key={t.id} className={styles.taskItem}>
               <div>
                 <div className={styles.taskTitle}>
-                  {t.name} <span className={styles.taskCode}>({t.code})</span>
+                  {t.title} <span className={styles.taskCode}>(ID: {t.id.slice(0, 6)})</span>
                 </div>
                 <div className={styles.taskMeta}>
-                  <span>個数: {t.quantity}</span>
+                  <span>ステータス: {t.status}</span>
                   {t.priority && <span>優先度: {t.priority}</span>}
-                  {t.dueDate && <span>期限: {t.dueDate}</span>}
                 </div>
               </div>
 

@@ -1,5 +1,5 @@
 # ==========================================
-# 共通 (OS / IDE / エディタ)
+# 共通 (OS / IDE / エディタ / ログ)
 # ==========================================
 .DS_Store
 Thumbs.db
@@ -16,9 +16,23 @@ Thumbs.db
 .env.*.local
 
 # ==========================================
+# モノレポ共通 (ルート & 全パッケージ共通)
+# ==========================================
+# ★ ルート直下およびサブフォルダすべての node_modules を一括除外
+node_modules/
+.pnpm-store/
+.tsbuildinfo
+
+# ビルド成果物・出力ディレクトリ（全層共通）
+dist/
+build/
+out/
+.next/
+
+# ==========================================
 # 1. Edge AI / ROS 2 (edge_ai/)
 # ==========================================
-# colcon build による自動生成物 (手元環境依存のため除外)
+# colcon build による自動生成物
 edge_ai/ros2_ws/build/
 edge_ai/ros2_ws/install/
 edge_ai/ros2_ws/log/
@@ -30,23 +44,7 @@ __pycache__/
 .pytest_cache/
 
 # ==========================================
-# 2. Web Frontend (frontend/)
-# ==========================================
-frontend/node_modules/
-frontend/.next/
-frontend/out/
-frontend/build/
-frontend/.pnpm-debug.log*
-
-# ==========================================
-# 3. Web Backend (backend/)
-# ==========================================
-backend/node_modules/
-backend/dist/
-backend/build/
-
-# ==========================================
-# 4. Hardware / Firmware (firmware/)
+# 2. Hardware / Firmware (firmware/)
 # ==========================================
 # PlatformIO ビルド生成物
 firmware/.pio/
