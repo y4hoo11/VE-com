@@ -10,17 +10,25 @@
     "seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
+<<<<<<< Updated upstream
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/mqtt": "^0.0.34",
+=======
+    "@types/express": "^5.0.6",
+>>>>>>> Stashed changes
     "jiti": "^2.7.0",
     "prisma": "^6.19.3",
     "tsx": "^4.23.15"
   },
   "dependencies": {
+<<<<<<< Updated upstream
     "@prisma/client": "^6.19.3",
     "cors": "^2.8.6",
     "express": "^5.3.0",
     "socket.io": "^4.8.4"
+=======
+    "express": "^5.3.0"
+>>>>>>> Stashed changes
   }
 }
