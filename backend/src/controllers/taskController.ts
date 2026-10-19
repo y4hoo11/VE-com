@@ -81,7 +81,6 @@ export const createTask = async (req: Request, res: Response) => {
 export const deleteTask = async (req: Request, res: Response) => {
   try {
     const taskId = getStringParam(req.params.id);
-    // DELETE メソッドではボディが正しく渡らないことがあるため、query や headers からもフォールバックして取得できるようにする
     const userId = getStringParam(req.body?.userId) || getStringParam(req.query?.userId);
 
     if (!taskId) {
@@ -98,25 +97,29 @@ export const deleteTask = async (req: Request, res: Response) => {
         throw new Error('Task not found');
       }
 
-      // 2. ★先にごく確実に TaskHistory を作成する（Task削除の前に実行）
+      // 2. タスクのステータスを CANCELLED に更新（または物理削除の代わりにキャンセル扱いにする）
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          status: TaskStatus.CANCELLED,
+          completedAt: new Date(), // キャンセル日時を記録する場合
+        },
+      });
+
+      // 3. 確実に TaskHistory を作成・保存する
       await tx.taskHistory.create({
         data: {
           taskId: existingTask.id,
           status: TaskStatus.CANCELLED,
-          note: `タスク「${existingTask.title}」が削除されました (実行ユーザーID: ${userId || '不明'})`,
+          note: `タスク「${existingTask.title}」が削除（キャンセル）されました (実行ユーザーID: ${userId || '不明'})`,
         },
-      });
-
-      // 3. 最後に Task 本体を削除
-      await tx.task.delete({
-        where: { id: taskId },
       });
     });
 
-    res.status(200).json({ message: 'タスクが正常に削除されました' });
+    res.status(200).json({ message: 'タスクが正常にキャンセル（削除）されました' });
   } catch (error) {
     console.error('タスク削除エラー:', error);
-    res.status(500).json({ error: 'タスクの削除に失敗しました' });
+    res.status(500).json({ error: 'タスクの削除に失敗しました', details: String(error) });
   }
 };
 
