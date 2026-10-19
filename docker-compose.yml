@@ -30,11 +30,66 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ve_con_ros2
+
+    environment:
+      # ---- 画面(GUI)を Windows のデスクトップに出すための設定 ----
+      # Windows 11 標準の WSLg を使う。VcXsrv 等の追加インストールは不要。
+      - DISPLAY=:0
+      - WAYLAND_DISPLAY=wayland-0
+      - XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir
+      - PULSE_SERVER=/mnt/wslg/PulseServer
+      # Qt が Wayland プラグインを探しに行って失敗するのを防ぐ
+      - QT_QPA_PLATFORM=xcb
+      # 3D描画をGPUではなくCPUで行う。遅いが確実に映る。
+      # コンテナには WSL の Mesa ドライバが無いため、これが無いと
+      # Gazebo が真っ黒になったり即座に落ちたりする。
+      - LIBGL_ALWAYS_SOFTWARE=1
+
+      # ---- ROS 2 の通信設定 ----
+      # ROS 2 のプログラム同士は「DDS」という仕組みで互いを自動検出する。
+      # ROS_DOMAIN_ID は、その「チャンネル番号」。
+      # 決めておかないと同じネットワークにいる他人の ROS 2 と混信する。
+      # チーム内で 30 に統一すること。
+      - ROS_DOMAIN_ID=30
+      # 通信をこのコンテナの中だけに限定する。
+      # Gazebo も Nav2 も RViz も全部1コンテナ内で動くのでこれで十分。
+      # Docker Desktop のネットワーク事情に左右されず確実に動く。
+      # 実機ロボットと繋ぐ段階になったら外す。
+      - ROS_LOCALHOST_ONLY=1
+      # Dockerfile で CycloneDDS を入れているのに未指定だったので明示。
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+
+      # ---- シミュレータの設定 ----
+      # burger はカメラ非搭載のため不可。
+      # waffle_pi は実機 TurtleBot3 Waffle Pi とトピック名が一致するので、
+      # シミュレータで書いたコードがそのまま実機に載る。
+      - TURTLEBOT3_MODEL=waffle_pi
+      # 先頭の /usr/share/gazebo-11/models は必須。
+      # ground_plane と sun という基本モデルがここにあり、これを外すと
+      # Gazebo がモデルをインターネットから取得しようとして起動しなくなる。
+      - GAZEBO_MODEL_PATH=/usr/share/gazebo-11/models:/opt/ros/humble/share/turtlebot3_gazebo/models:/workspace/ros2_ws/src/agv_main/models
+      # モデルのオンライン取得を無効化する。必要なモデルは上のパスに全部あるので、
+      # 取りに行かせない方が起動が速く、オフラインでも確実に動く。
+      - GAZEBO_MODEL_DATABASE_URI=
+
     volumes:
-      - ./edge-ai/ros2_ws:/workspace/ros2_ws
+      - ./edge_ai/ros2_ws:/workspace/ros2_ws
+      # 下の2行は WSLg（Windows が用意している画面表示の仕組み）への接続口。
+      # /run/desktop/... は Docker Desktop の内部パスなので、
+      # エクスプローラで探しても見つからない。それで正常。
+      - /run/desktop/mnt/host/wslg/.X11-unix:/tmp/.X11-unix
+      - /run/desktop/mnt/host/wslg:/mnt/wslg
+
+    # Docker の既定(64MB)だと DDS の共有メモリ転送が詰まることがある
+    shm_size: 2gb
+
     tty: true
     stdin_open: true
-    network_mode: host # ROS 2トピック通信のローカル疎通を円滑化
+
+# 注: 以前あった network_mode: host は削除した。
+#     これは Linux 専用の機能で Windows の Docker Desktop では効かず、
+#     むしろ不安定さの原因になる。代わりに上の ROS_LOCALHOST_ONLY=1 で
+#     通信をコンテナ内に閉じている。
 
 volumes:
   postgres_data:
