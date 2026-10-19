@@ -7,15 +7,16 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import styles from '../../styles/TaskPanel.module.css';
 
-// バックエンドの Prisma モデルに合わせた Task 型の定義
 export interface TaskItem {
   id: string;
-  title: string;       // name ではなく title に対応
+  title: string;
   startLocation?: string;
   targetLocation?: string;
-  quantity?: number;   // 必要に応じてバックエンド側に追加またはそのまま
+  quantity?: number;
   priority: number;
   status: string;
+  scheduledAt?: string;
+  createdByUserId?: string;
   createdAt: string;
 }
 
@@ -33,6 +34,9 @@ export const TaskPanel: React.FC = () => {
   const [newTaskPriority, setNewTaskPriority] = useState<number>(1);
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
 
+  // ログインユーザーID（認証機能やコンテキスト等から取得するイメージです）
+  const currentUserId = 'usr-001'; 
+
   // データベースからタスク一覧を取得 (GET)
   const fetchTasks = async () => {
     try {
@@ -45,7 +49,6 @@ export const TaskPanel: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-    // リアルタイム性を高めるためのポーリング（または Socket.io 連携）
     const interval = setInterval(fetchTasks, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -57,13 +60,15 @@ export const TaskPanel: React.FC = () => {
 
     try {
       await api.post('/tasks', {
-        title: newTaskName,          // バックエンドが受け取るフィールド名
-        startLocation: 'Dock-A',     // デフォルトまたはフォームの入力値
-        targetLocation: 'Station-1', // デフォルトまたはフォームの入力値
+        title: newTaskName,
+        startLocation: 'Dock-A',
+        targetLocation: 'Station-1',
         priority: newTaskPriority,
+        scheduledAt: newTaskDueDate ? new Date(newTaskDueDate).toISOString() : null, // 期限
+        createdByUserId: currentUserId, // 実行ユーザーID
       });
 
-      // フォームをリセットして一覧を再取得
+      // フォームリセット
       setNewTaskName('');
       setNewTaskQuantity(1);
       setNewTaskPriority(1);
@@ -78,8 +83,13 @@ export const TaskPanel: React.FC = () => {
 
   // 削除処理 (DELETE)
   const handleDeleteTask = async (id: string) => {
+    if (!window.confirm('本当にこのタスクを削除しますか？')) return;
+
     try {
-      await api.delete(`/tasks/${id}`);
+      // 削除実行ユーザーをクエリパラメータやリクエストデータ等で送信
+      await api.delete(`/tasks/${id}`, {
+        data: { userId: currentUserId },
+      });
       fetchTasks();
     } catch (error) {
       console.error('タスクの削除に失敗しました:', error);
@@ -252,6 +262,9 @@ export const TaskPanel: React.FC = () => {
                 <div className={styles.taskMeta}>
                   <span>ステータス: {t.status}</span>
                   {t.priority && <span>優先度: {t.priority}</span>}
+                  {t.scheduledAt && (
+                    <span>期限: {new Date(t.scheduledAt).toLocaleDateString()}</span>
+                  )}
                 </div>
               </div>
 
