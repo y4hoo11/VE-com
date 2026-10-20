@@ -1,7 +1,7 @@
-// index.ts
+// routes/index.ts
 import { Router } from 'express';
 import { getVehicles, getVehicleById } from '../controllers/agvController';
-import { getTasks, createTask, assignTask } from '../controllers/taskController';
+import { getTasks, createTask, assignTask, deleteTask } from '../controllers/taskController'; // deleteTaskを追加
 
 const router = Router();
 
@@ -13,5 +13,6 @@ router.get('/vehicles/:id', getVehicleById);
 router.get('/tasks', getTasks);
 router.post('/tasks', createTask);
 router.post('/tasks/assign', assignTask);
+router.delete('/tasks/:id', deleteTask); // 👈 削除APIを追加
 
 export default router;

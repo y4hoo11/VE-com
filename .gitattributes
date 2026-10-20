@@ -1,0 +1,19 @@
+# Windows で開発し Linux コンテナで動かす構成のため、改行コードを固定する。
+# これが無いと、Windows で保存したシェルスクリプトが Linux 上で
+# "bad interpreter: /bin/bash^M" という分かりにくいエラーで落ちる。
+
+* text=auto
+
+*.sh       text eol=lf
+*.py       text eol=lf
+*.yaml     text eol=lf
+*.yml      text eol=lf
+*.xml      text eol=lf
+*.cfg      text eol=lf
+Dockerfile text eol=lf
+
+# 画像・バイナリは変換対象外
+*.png  binary
+*.jpg  binary
+*.pgm  binary
+*.pdf  binary
