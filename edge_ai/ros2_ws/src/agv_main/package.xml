@@ -2,13 +2,28 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="xmlschema"?>
 <package format="3">
   <name>agv_main</name>
-  <version>0.0.0</version>
-  <description>AGV Main Control Package</description>
+  <version>0.1.0</version>
+  <description>AGV Main Control Package（車両側: ESP32 との橋渡し・安全ガード・オドメトリ・LiDAR・カメラ・シミュレーター / PC1 側: Web との MQTT 橋渡し）</description>
   <maintainer email="user@todo.todo">user</maintainer>
   <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>rcl_interfaces</depend>
+  <depend>tf2_ros</depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>python3-serial</exec_depend>
+  <exec_depend>python3-paho-mqtt</exec_depend>
+  <!-- 実機の LiDAR: ros-humble-rplidar-ros（edge_ai/docker/robot.Dockerfile で入れている） -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

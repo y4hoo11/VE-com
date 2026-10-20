@@ -1,0 +1,41 @@
+# =====================================================================
+#  ラズパイ（車両）で動かす:  docker compose -f edge_ai/docker/docker-compose.robot.yml up -d --build
+#  （edge_ai/scripts/start_robot.sh がこれを実行する）
+#
+#  先に edge_ai/docker/.env を作る（robot.env.example をコピーして PC1_IP を書く）
+# =====================================================================
+services:
+  # 1. 車両の ROS ノード（serial_bridge / rplidar / camera_node / static TF）
+  robot:
+    build:
+      context: .
+      dockerfile: robot.Dockerfile
+    container_name: agv_robot
+    restart: unless-stopped
+    network_mode: host        # ラズパイ（Linux）なので host が使える。DDS は localhost のみで使う
+    privileged: true          # USB（ESP32 / LiDAR）を抜き差ししても見えるように /dev ごと渡す
+    volumes:
+      - ../ros2_ws:/workspace/ros2_ws
+      - /dev:/dev
+    environment:
+      - ROS_DOMAIN_ID=30                 # チーム共通（docker-compose.yml と同じ）
+      - ROS_LOCALHOST_ONLY=1             # Wi-Fi に DDS を流さない（PC1 とは Zenoh で）
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - AGV_ID=${AGV_ID:-AGV-01}
+      - LIDAR_DRIVER=${LIDAR_DRIVER:-rplidar_ros}
+      - LIDAR_PORT=${LIDAR_PORT:-/dev/ttyUSB0}
+      - CAMERA=${CAMERA:-true}
+    shm_size: 512mb
+
+  # 2. Zenoh ブリッジ: このラズパイの ROS トピックを PC1 へ（TCP 1本で Wi-Fi・Docker Desktop 越しでも届く）
+  zenoh:
+    image: eclipse/zenoh-bridge-ros2dds:1.10.1
+    container_name: agv_zenoh
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - ROS_DOMAIN_ID=30
+      - ROS_LOCALHOST_ONLY=1
+      - ROS_DISTRO=humble
+      - RUST_LOG=info
+    command: ["-e", "tcp/${PC1_IP:?edge_ai/docker/.env に PC1_IP を書いてください}:7447"]
