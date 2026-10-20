@@ -1,0 +1,96 @@
+# =====================================================================
+#  ラズパイ（車両側）の設定ファイル  … serial_bridge / sim_robot / lidar_node / camera_node / scan_check 共通
+#  （/** はすべてのノードに同じ値を渡すという意味）
+#
+#  ※ AGV_ID などは robot.launch.py の引数でも変えられる:
+#      ros2 launch agv_main robot.launch.py agv_id:=AGV-02
+# =====================================================================
+/**:
+  ros__parameters:
+    agv_id: "AGV-01"
+    name: "1号機"
+
+    # ---- 座標フレームの名前（Nav2 の設定 nav2_params.yaml と合わせる）----
+    frames:
+      odom: "odom"
+      base: "base_link"            # 車体の中心
+      laser: "laser"
+      camera: "camera_link"
+      camera_optical: "camera_optical_frame"
+    publish_static_tf: true        # base_link→laser / camera_link / camera_optical_frame を serial_bridge が出す
+
+    esp32:
+      port: "auto"                 # auto = /dev/serial/by-id の Espressif → /dev/ttyACM* の順に探す
+      baud: 115200
+
+    # ---- 車体（TT-02）----
+    vehicle:
+      wheelbase: 0.257             # ホイールベース [m]
+      max_steer_deg: 25.0          # steer=1.0 のときの実舵角 [deg]（実測して合わせる）
+      length: 0.42                 # 全長 [m]
+      width: 0.19                  # 全幅 [m]
+
+    # ---- 速度モデル（エンコーダが無いので「スロットル→速度」を実測で決める）----
+    #  v[m/s] = gain_mps * (|throttle| - deadband)
+    #  teleop_twist_keyboard で一定速度で走らせ、実際に進んだ距離/時間を測って gain_mps を合わせる
+    speed_model:
+      deadband: 0.06
+      gain_mps: 2.4
+      min_speed: 0.12              # これより遅い指令はこの速さに上げる（遅すぎると TT-02 は止まってしまう）
+      tau_s: 0.25                  # 加速の遅れ（オドメトリ用）
+      ticks_per_meter: 0.0         # 車輪エンコーダを付けたら 1m あたりのパルス数（0 = 使わない）
+
+    # ---- LiDAR の取り付け（車体中心から）。TF base_link→laser もこの値で出す ----
+    laser:
+      x: 0.05                      # 前 [m]
+      y: 0.0                       # 左 [m]
+      z: 0.12                      # 高さ [m]
+      yaw_deg: 0.0                 # laser の +x が車体のどちらを向いているか。ros2 run agv_main scan_check で確認
+      min_range: 0.12              # これより近い点は車体自身の反射として無視 [m]
+      max_range: 8.0
+
+    # ---- カメラの取り付け（TF base_link→camera_link）。marker_localizer はこの TF を使う ----
+    camera_mount:
+      x: 0.18
+      y: 0.0
+      z: 0.15
+      pitch_deg: 15.0              # 下向きの傾き（正 = 下を向く）
+      yaw_deg: 0.0
+
+    # ---- 安全ガード（PC1 とは独立して、ラズパイだけで判断する最後の砦）----
+    safety:
+      side_margin: 0.05            # 左右の余裕 [m]
+      stop_distance: 0.22          # 前端（後退時は後端）からこの距離に障害物 → 停止 [m]
+      speed_gain: 0.35             # スロットル 1.0 のとき停止距離に足す距離 [m]
+      slow_distance: 0.55          # この距離から減速 [m]
+      block_escalate_s: 15.0       # この秒数止まり続けたら Web に「BLOCKED」を通知
+      require_lidar: true          # LiDAR が動いていないときは走らせない
+      lidar_timeout_s: 0.6
+      drive_timeout_s: 0.5         # /cmd_vel がこの秒数来なければ停止
+      max_throttle: 0.6            # スロットルの絶対上限
+
+    battery:                       # 走行用 7.2V ニッケル水素（6セル）
+      empty_v: 6.6
+      full_v: 8.2
+
+    rates:
+      control_hz: 20.0             # ESP32 へ指令を送る周期
+      info_hz: 1.0
+
+    # ---- 自前 LiDAR ドライバ（lidar_driver:=builtin のときだけ使う）----
+    lidar:
+      port: "auto"
+      baud: 115200
+      bins: 360
+      min_quality: 1
+
+    # ---- カメラ（camera_node）----
+    camera:
+      source: "auto"               # auto / mjpeg / picamera2 / opencv（説明は camera_node.py）
+      url: "http://127.0.0.1:8090/stream.mjpg"   # mjpeg のとき（pi_camera_relay.py の配信先）
+      device: 0
+      width: 640
+      height: 480
+      fps: 10.0
+      jpeg_quality: 70
+      calib_file: ""               # 空なら agv_main/config/camera_calib.yaml（launch が入れる）

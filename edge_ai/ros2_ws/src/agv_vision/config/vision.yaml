@@ -1,0 +1,40 @@
+# =====================================================================
+#  marker_localizer（ArUco マーカーで自己位置を補正）の設定  … PC1
+# =====================================================================
+/**:
+  ros__parameters:
+    markers_file: ""               # 空なら agv_vision/config/markers.yaml（マーカーを貼った位置）
+    calib_file: ""                 # camera_info が来ないとき用（空なら agv_main/config/camera_calib.yaml）
+    image_transport: "compressed"  # compressed（ラズパイの camera_node）/ raw（Gazebo の TurtleBot3 など）
+    process_hz: 5.0                # 1秒に何枚解析するか
+    aruco_dict: "DICT_4X4_50"
+    marker_size: 0.15              # 印刷したマーカーの黒い四角の一辺 [m]（make_markers --size-mm 150）
+    max_marker_distance: 2.5       # これより遠いマーカーは使わない [m]
+    min_size_px: 60.0              # 映ったマーカーの一辺がこれ未満なら向きが信用できないので補正しない
+
+    correction:
+      enabled: true
+      when_quality_below: 0.6      # AMCL の確からしさがこれ未満なら補正
+      when_error_above: 0.35       # AMCL とマーカーの位置がこれ以上ずれていたら補正 [m]
+      when_yaw_error_above_deg: 15.0
+      big_jump: 1.0                # これ以上ずれるときは、続けて big_jump_frames 回見えたら補正
+      big_jump_frames: 3
+      cooldown_s: 3.0
+      max_speed: 0.35              # 速く走っているときは補正しない（映像が遅れるため）[m/s]
+      max_yaw_rate: 0.5            # [rad/s]
+      cov_xy: 0.08
+      cov_deg: 6.0
+
+    http:
+      enabled: true                # http://<PC1>:5000/video でマーカーの枠つき映像
+      port: 5000
+
+    yolo:
+      enabled: false               # true: 人が近くに映ったら Nav2 の速度上限を下げる（pip install ultralytics が必要）
+      model: "yolov8n.pt"
+      conf: 0.45
+      classes: ["person"]
+      min_height_frac: 0.25
+      slow_percent: 50.0
+      hold_s: 1.5
+      every_n_frames: 2
