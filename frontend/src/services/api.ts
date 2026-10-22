@@ -2,8 +2,11 @@
 import axios from 'axios';
 import { AUTH_CONFIG } from '../config/Auth';
 
+// バックエンドのURL（API と Socket.IO の両方で使う）
+export const API_ORIGIN = 'http://localhost:3001';
+
 export const api = axios.create({
-  baseURL: 'http://localhost:3001/api',
+  baseURL: `${API_ORIGIN}/api`,
   headers: {
     'Content-Type': 'application/json',
   },

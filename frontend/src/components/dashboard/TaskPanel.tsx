@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { useSocketEvent } from '../../hooks/useSocketEvent';
 import styles from '../../styles/TaskPanel.module.css';
 
 export interface TaskItem {
@@ -49,9 +50,12 @@ export const TaskPanel: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
-    const interval = setInterval(fetchTasks, 5000);
-    return () => clearInterval(interval);
   }, []);
+
+  // 誰かがタスクを追加・削除・更新したら一覧を取り直す（別の画面・別の人の操作も反映される）
+  useSocketEvent('tasks:changed', fetchTasks);
+  // 再接続したときも、切断中の変化を取り直す
+  useSocketEvent('connect', fetchTasks);
 
   // 追加処理 (POST)
   const handleCreateTask = async (e?: React.FormEvent) => {

@@ -2,6 +2,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 import { dispatchService } from '../services/dispatchService';
+import { socketService } from '../services/socketService';
 import { TaskStatus, VehicleStatus } from '@prisma/client';
  
 // ヘルパー関数: string | string[] から安全に単一の string を取り出す
@@ -96,6 +97,7 @@ export const createTask = async (req: Request, res: Response) => {
       return newTask;
     });
  
+    socketService.broadcastTasksChanged();
     res.status(201).json(result);
   } catch (error) {
     console.error('タスク作成エラー:', error);
@@ -152,6 +154,7 @@ export const deleteTask = async (req: Request, res: Response) => {
       return res.status(409).json({ error: '既に完了またはキャンセル済みのタスクです' });
     }
  
+    socketService.broadcastTasksChanged();
     res.status(200).json({ message: 'タスクをキャンセル（削除）しました' });
   } catch (error) {
     console.error('タスク削除エラー:', error);
@@ -271,6 +274,7 @@ export const updateTask = async (req: Request, res: Response) => {
       });
 
       const actor = req.user?.id || getStringParam(userId) || '不明';
+      let releasedVehicleId: string | null = null;
       if (statusChanged) {
         await tx.taskHistory.create({
           data: {
@@ -294,6 +298,7 @@ export const updateTask = async (req: Request, res: Response) => {
               where: { id: task.assignedVehicleId },
               data: { status: VehicleStatus.IDLE },
             });
+            releasedVehicleId = task.assignedVehicleId;
           }
         }
       } else if (hasContentChange) {
@@ -306,7 +311,7 @@ export const updateTask = async (req: Request, res: Response) => {
         });
       }
 
-      return { kind: 'ok' as const, task: updated };
+      return { kind: 'ok' as const, task: updated, releasedVehicleId };
     });
 
     if (outcome.kind === 'not_found') {
@@ -321,6 +326,10 @@ export const updateTask = async (req: Request, res: Response) => {
         .json({ error: `ステータスを ${outcome.from} から ${outcome.to} には変更できません` });
     }
 
+    socketService.broadcastTasksChanged();
+    if (outcome.releasedVehicleId) {
+      socketService.broadcastVehicleUpdate({ id: outcome.releasedVehicleId, status: VehicleStatus.IDLE });
+    }
     res.json(outcome.task);
   } catch (error) {
     console.error('タスク更新エラー:', error);

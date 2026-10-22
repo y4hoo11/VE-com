@@ -12,6 +12,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User } from '../types/Auth';
 import { AUTH_CONFIG } from '../config/Auth';
 import { AUTH_EXPIRED_EVENT } from '../services/api';
+import { socket } from '../services/socket';
 
 interface AuthContextType {
   user: User | null;
@@ -49,6 +50,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired);
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired);
   }, []);
+
+  // ログイン中だけリアルタイム通信をつなぐ
+  useEffect(() => {
+    if (user) {
+      socket.connect();
+    } else {
+      socket.disconnect();
+    }
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>

@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import { EmergencyBrake } from './pages/EmergencyControl';
+import { EmergencyPage } from './pages/EmergencyPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Control } from './pages/Control';
@@ -42,15 +42,8 @@ const Dashboard: React.FC = () => {
           <Route path="/settings" element={<SettingCarousel />} /> {/* 設定画面のルート定義 */}
           
           {/* ★追加：緊急制御画面へのルーティング定義 */}
-          <Route 
-            path="/emergency/:id" 
-            element={
-              <EmergencyBrake 
-                selectedVehicle={{ id: '1', name: '車両1', status: '稼働中' }} 
-                onBack={() => navigate('/control')} 
-              />
-            } 
-          />
+          {/* URLの車両IDから実際の車両情報を取得して表示する */}
+          <Route path="/emergency/:id" element={<EmergencyPage />} />
 
           <Route path="*" element={<Control />} />
         </Routes>
@@ -116,4 +109,4 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
   );
-}
+}

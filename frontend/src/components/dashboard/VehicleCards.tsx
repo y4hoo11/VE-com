@@ -1,17 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { api } from '../../services/api';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useVehicles } from '../../hooks/useVehicles';
 import styles from '../../styles/VehicleCards.module.css';
 
-export interface VehicleItem {
-  id: string;
-  name: string;
-  status: string;
-  batteryLevel: number | null;
-  currentX: number;
-  currentY: number;
-  emergencyReason?: string | null;
-}
+export type { VehicleItem } from '../../hooks/useVehicles';
 
 type VehicleCardsProps = {
   onSelectVehicle: (id: string) => void;
@@ -29,26 +21,11 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
   onSelectVehicle,
   onAcknowledgeEmergency,
 }) => {
-  const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
+  // 車両一覧（サーバーからの更新がリアルタイムに反映される）
+  const { vehicles } = useVehicles();
   
   // ★ useNavigate はコンポーネント関数の中に移動（慣例として小文字の navigate を使用）
   const navigate = useNavigate();
-
-  // データベースから車両一覧を取得
-  const fetchVehicles = async () => {
-    try {
-      const res = await api.get<VehicleItem[]>('/vehicles');
-      setVehicles(res.data);
-    } catch (err) {
-      console.error('車両一覧の取得に失敗しました:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchVehicles();
-    const interval = setInterval(fetchVehicles, 3000); // 3秒ごとにポーリング
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className={styles.container}>
@@ -112,4 +89,4 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
       })}
     </div>
   );
-};
+};

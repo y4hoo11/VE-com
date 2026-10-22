@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { emitWithAck } from '../services/socket';
 import '../styles/EmergencyControl.css';
 
 export type Vehicle = {
@@ -87,9 +88,43 @@ export const EmergencyBrake: React.FC<Props> = ({ selectedVehicle, onBack }) => 
     };
   }, []);
 
-  const handleEmergencyStop = () => {
-    alert(`⚠️ 車両【${selectedVehicle.name}】（ID: ${selectedVehicle.id}）へ緊急停止信号を送信しました`);
+  // 緊急停止の送信中フラグ（連打・SPACEとクリックの二重送信を防ぐ）
+  const [isSending, setIsSending] = useState(false);
+  const sendingRef = useRef(false);
+
+  const handleEmergencyStop = async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    setIsSending(true);
+
+    const res = await emitWithAck('manual_emergency_stop', { vehicleId: selectedVehicle.id });
+
+    sendingRef.current = false;
+    setIsSending(false);
+
+    if (res.ok) {
+      alert(`⚠️ 車両【${selectedVehicle.name}】（ID: ${selectedVehicle.id}）へ緊急停止信号を送信しました`);
+    } else {
+      alert(`❌ 緊急停止に失敗しました: ${res.error}`);
+    }
   };
+
+  // SPACEキーで緊急停止（最新の handleEmergencyStop を呼ぶため ref 経由にする）
+  const emergencyStopRef = useRef(handleEmergencyStop);
+  useEffect(() => {
+    emergencyStopRef.current = handleEmergencyStop;
+  });
+
+  useEffect(() => {
+    const handleSpace = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault(); // ボタンにフォーカスがあるときの二重クリックやスクロールを防ぐ
+        emergencyStopRef.current();
+      }
+    };
+    window.addEventListener('keydown', handleSpace);
+    return () => window.removeEventListener('keydown', handleSpace);
+  }, []);
 
   // 距離から点灯させるアークのレベル（0:消灯, 1:遠〜4:近）を判定
   const getActiveLevel = (dist: number) => {
@@ -268,11 +303,11 @@ export const EmergencyBrake: React.FC<Props> = ({ selectedVehicle, onBack }) => 
 
         {/* 緊急停止ボタン */}
         <div className="action-area">
-          <button type="button" onClick={handleEmergencyStop} className="stop-button">
-            【{selectedVehicle.name}】を緊急停止する (SPACE)
+          <button type="button" onClick={handleEmergencyStop} className="stop-button" disabled={isSending}>
+            {isSending ? '緊急停止を送信中...' : `【${selectedVehicle.name}】を緊急停止する (SPACE)`}
           </button>
         </div>
       </main>
     </div>
   );
-};
+};
