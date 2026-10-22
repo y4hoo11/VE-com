@@ -5,6 +5,7 @@ import { VehicleUpdatePayload, LogPayload } from '../types';
 import { mqttService } from './mqttService';
 import { prisma } from '../config/database';
 import { VehicleStatus } from '@prisma/client';
+import { verifyToken } from '../middleware/auth';
 
 class SocketService {
   private io: Server | null = null;
@@ -12,6 +13,15 @@ class SocketService {
   init(httpServer: HttpServer) {
     this.io = new Server(httpServer, {
       cors: { origin: '*' },
+    });
+
+    // 接続時にトークンを確認する（フロントは io(url, { auth: { token } }) で送る）
+    this.io.use((socket, next) => {
+      const token = socket.handshake.auth?.token;
+      const user = typeof token === 'string' ? verifyToken(token) : null;
+      if (!user) return next(new Error('unauthorized'));
+      socket.data.user = user;
+      next();
     });
 
     this.io.on('connection', (socket: Socket) => {
@@ -58,4 +68,4 @@ class SocketService {
   }
 }
 
-export const socketService = new SocketService();
+export const socketService = new SocketService();

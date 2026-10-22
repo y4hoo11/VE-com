@@ -26,6 +26,14 @@ export {
   SettingCategory,
 };
 
+// フロントエンド表示用のログエントリ型
+export interface LogEntry {
+  id: number;
+  message: string;
+  level: 'info' | 'warn' | 'error' | 'emergency';
+  time: string;
+}
+
 // フロントエンドとのリアルタイム更新用ペイロード型定義
 export interface VehicleUpdatePayload {
   id: string;
@@ -47,4 +55,4 @@ export interface LogPayload {
   message: string;
   details?: Record<string, unknown>;
   timestamp: string;
-}
+}

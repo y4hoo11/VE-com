@@ -21,7 +21,15 @@ export {
   SettingCategory,
 } from '@prisma/client';
 
-// 2. WebSocket通信用などのリアルタイム更新用ペイロード型定義
+// 2. フロントエンド表示用のログエントリ型（LogPanelなどが使用）
+export interface LogEntry {
+  id: number | string;
+  message: string;
+  level: 'info' | 'warn' | 'error' | 'emergency';
+  time: string;
+}
+
+// 3. WebSocket通信用などのリアルタイム更新用ペイロード型定義
 export interface VehicleUpdatePayload {
   id: string;
   name?: string;
@@ -41,4 +49,4 @@ export interface LogPayload {
   message: string;
   details?: Record<string, unknown>;
   timestamp: string;
-}
+}

@@ -5,9 +5,11 @@ import { VehicleStatus, LogLevel } from '@prisma/client';
 
 class MqttService {
   init() {
-    mqttClient.subscribe(['agv/+/telemetry', 'agv/+/emergency'], (err) => {
+    mqttClient.subscribe(['agv/+/telemetry', 'agv/+/emergency'], undefined, (err: Error | null) => {
       if (!err) {
         console.log('[MQTT] 購読開始: agv/+/telemetry, agv/+/emergency');
+      } else {
+        console.error('[MQTT] 購読エラー:', err);
       }
     });
 
@@ -105,4 +107,4 @@ class MqttService {
   }
 }
 
-export const mqttService = new MqttService();
+export const mqttService = new MqttService();

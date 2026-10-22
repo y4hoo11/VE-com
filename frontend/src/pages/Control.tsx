@@ -1,53 +1,99 @@
 /**
  * @file Control.tsx
  * @description AGV（無人搬送車）の操作・監視を行うメインコントロール画面。
- * タスク管理パネル、2Dマップ表示、車両ステータスカード、通知・ログパネルを統括し、
- * 各コンポーネント間で共有する状態（tasks, vehicles, logs）を管理します。
+ * 各子コンポーネント（TaskPanel, VehicleCards, LogPanel, FactoryMap）を統括します。
  */
 
-import React, { useState } from 'react';
-import type { Task, Vehicle, LogEntry } from '../types';
+import React, { useState, useEffect } from 'react';
+import type { LogEntry } from '../types';
+import { api } from '../services/api';
+import { VehicleStatus } from '@prisma/client';
 import { TaskPanel } from '../components/dashboard/TaskPanel';
 import { FactoryMap } from '../components/map/FactoryMap';
 import { VehicleCards } from '../components/dashboard/VehicleCards';
 import { LogPanel } from '../components/dashboard/LogPanel';
 
+// マップ表示用の車両型（VehicleCards側のVehicleItemと合わせる）
+interface MapVehicle {
+  id: string;
+  name: string;
+  status: VehicleStatus | string;
+  batteryLevel: number | null;
+  currentX: number;
+  currentY: number;
+  emergencyReason?: string | null;
+}
+
+// GET /api/logs のレスポンス型
+interface ApiLog {
+  id: string;
+  vehicleId: string;
+  level: 'INFO' | 'WARN' | 'ERROR';
+  message: string;
+  timestamp: string;
+}
+
 export const Control: React.FC = () => {
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
 
-  // 全体で共有する状態データ
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: '1', code: 'A13-2', name: '搬送タスク', progress: 50, quantity: 10 },
-  ]);
+  // マップ（FactoryMap）用に定期的に車両データを取得するステート
+  const [mapVehicles, setMapVehicles] = useState<MapVehicle[]>([]);
 
-  const [vehicles] = useState<Vehicle[]>([
-    { id: 'AGV-01', name: '1号機', status: '稼働中', battery: 85, task: 'A13-2', emergency: null },
-    { id: 'AGV-02', name: '2号機', status: '充電中', battery: 42, task: null, emergency: null },
-    { id: 'AGV-03', name: '3号機', status: '停止中', battery: 99, task: null, emergency: '障害物検知' },
-  ]);
+  // ログ用ステート（DBの vehicle_logs から定期取得）
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
-  const [logs] = useState<LogEntry[]>([
-    { id: 1, message: '車両Aタスク完了', level: 'info', time: '10:00' },
-    { id: 2, message: '車両B緊急停止', level: 'emergency', time: '10:05' },
-  ]);
-
-  // ハンドラー関数群
-  const handleAddTask = (name: string) => {
-    setTasks(prev => [...prev, {
-      id: String(Date.now()),
-      code: 'A13-99',
-      name,
-      progress: 0,
-      quantity: 1,
-    }]);
+  // マップ描画用の車両位置データを定期取得
+  const fetchMapVehicles = async () => {
+    try {
+      const res = await api.get<MapVehicle[]>('/vehicles');
+      setMapVehicles(res.data);
+    } catch (err) {
+      console.error('マップ用車両データの取得に失敗しました:', err);
+    }
   };
 
-  const handleDeleteTask = (id: string) => {
-    setTasks(prev => prev.filter(t => t.id !== id));
+  // 通知・ログを定期取得し、LogPanel の表示形式に変換する
+  const fetchLogs = async () => {
+    try {
+      const res = await api.get<ApiLog[]>('/logs', { params: { limit: 30 } });
+      setLogs(
+        res.data.map((log) => ({
+          id: log.id,
+          message: log.vehicleId ? `[${log.vehicleId}] ${log.message}` : log.message,
+          // LogPanel は 'emergency' を赤表示するため、ERROR はそちらに寄せる
+          level: log.level === 'ERROR' ? 'emergency' : log.level === 'WARN' ? 'warn' : 'info',
+          time: new Date(log.timestamp).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+        }))
+      );
+    } catch (err) {
+      console.error('ログの取得に失敗しました:', err);
+    }
   };
+
+  useEffect(() => {
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    fetchMapVehicles();
+    const interval = setInterval(fetchMapVehicles, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSelectVehicle = (vehicleId: string) => {
     console.log(`車両 ${vehicleId} がクリックされました`);
+  };
+
+  const handleAcknowledgeEmergency = async (vehicleId: string) => {
+    try {
+      // 緊急状態の解除API、またはSocket経由の処理
+      console.log(`車両 ${vehicleId} の緊急状態を確認・解除します`);
+      fetchMapVehicles();
+    } catch (err) {
+      console.error('緊急解除に失敗しました:', err);
+    }
   };
 
   return (
@@ -63,29 +109,23 @@ export const Control: React.FC = () => {
           <span style={{ writingMode: 'vertical-rl', letterSpacing: '2px', fontWeight: 'bold', fontSize: '12px' }}>サイド</span>
         </div>
 
-        {/* 担当者A：タスク管理パネル */}
-        {isTaskPanelOpen && (
-          <TaskPanel
-            tasks={tasks}
-            onAddTask={handleAddTask}
-            onDeleteTask={handleDeleteTask}
-          />
-        )}
+        {/* タスク管理パネル（内部でDBから直接取得・追加・削除を行う） */}
+        {isTaskPanelOpen && <TaskPanel />}
 
-        {/* 担当者B：マップ表示エリア */}
-        <FactoryMap vehicles={vehicles} />
+        {/* マップ表示エリア */}
+        <FactoryMap vehicles={mapVehicles as any} />
       </div>
 
       {/* 下部エリア（車両情報 + ログ） */}
       <div style={{ height: '180px', display: 'flex', gap: '10px' }}>
         
-        {/* 担当者C：車両カード */}
+        {/* 車両カード（内部でDBから直接取得） */}
         <VehicleCards
-          vehicles={vehicles}
           onSelectVehicle={handleSelectVehicle}
+          onAcknowledgeEmergency={handleAcknowledgeEmergency}
         />
 
-        {/* 担当者D：通知・ログ */}
+        {/* 通知・ログパネル */}
         <LogPanel logs={logs} />
       </div>
     </div>
