@@ -1,0 +1,224 @@
+/* ==========================================================================
+   設定画面共通スタイル (SettingForm.css)
+   ========================================================================== */
+
+/* 外枠ドラッグスクロールコンテナ */
+.setting-scroll-wrapper {
+  width: 100%;
+  height: 100%;
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+  cursor: grab;
+  padding: 16px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+}
+
+.setting-scroll-wrapper.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* 内部フォームコンテナ */
+.setting-container {
+  font-family: sans-serif;
+  color: #333;
+  max-width: 650px;
+  margin: 0 auto;
+  min-width: 320px;
+}
+
+/* ドラッグ操作案内バナー */
+.setting-drag-notice {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 12px;
+  background-color: #f0f4f8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px dashed #b0c4de;
+}
+
+/* セクションカード */
+.setting-section {
+  margin-bottom: 24px;
+  background-color: #fff;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.setting-section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  border-bottom: 2px solid #007bff;
+  padding-bottom: 4px;
+  color: #007bff;
+}
+
+/* 行レイアウト */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.setting-label {
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-sub-label {
+  font-size: 11px;
+  color: #777;
+}
+
+/* フォームコントロール */
+.setting-select,
+.setting-input-text,
+.setting-input-number {
+  padding: 6px 10px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  box-sizing: border-box;
+}
+
+.setting-select {
+  cursor: pointer;
+}
+
+.setting-input-number {
+  width: 110px;
+  text-align: right;
+}
+
+.setting-input-text {
+  width: 200px;
+}
+
+.setting-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+/* ボタン & フッターエリア */
+.setting-button-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+  padding-bottom: 20px;
+}
+
+.setting-save-button {
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: bold;
+  color: #fff;
+  background-color: #007bff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.setting-save-button:hover {
+  background-color: #0056b3;
+}
+
+.setting-success-badge {
+  color: #28a745;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+/* テーブルスタイル (UserManagement用) */
+.setting-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.setting-table th {
+  text-align: left;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+  color: #495057;
+}
+
+.setting-table td {
+  padding: 8px;
+  border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
+}
+
+/* ユーザー追加用グリッドフォーム */
+.user-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 120px 80px;
+  gap: 8px;
+  align-items: end;
+}
+
+.setting-add-button {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  background-color: #28a745;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  height: 31px;
+}
+
+.setting-delete-button {
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #dc3545;
+  background-color: transparent;
+  border: 1px solid #dc3545;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.setting-label {
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left; /* 左揃えを明示 */
+}
+
+.setting-sub-label {
+  font-size: 11px;
+  color: #777;
+  text-align: left; /* サブラベルも左揃えを明示 */
+}
+
+/* 数値・短文用セレクトボックス（右揃え＆横幅を自動フィット） */
+.setting-select-number {
+  padding: 6px 10px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+  cursor: pointer;
+  width: 160px; /* 適切な横幅に固定 */
+  text-align: right; /* 右揃え指定 */
+  box-sizing: border-box;
+}
