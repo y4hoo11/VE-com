@@ -1,0 +1,39 @@
+# =====================================================================
+#  PC1 側（mission_manager / mqtt_bridge）の設定
+#  環境変数でも上書きできる: AGV_ID, MQTT_HOST, MQTT_PORT
+# =====================================================================
+/**:
+  ros__parameters:
+    agv_id: "AGV-01"
+    map_id: "demo_map"             # Web に送る地図の名前
+    waypoints_file: ""             # 空なら agv_navigation/config/waypoints.yaml
+
+    # ---- mqtt_bridge ----
+    mqtt:
+      host: "mosquitto"            # PC2 の Mosquitto。docker compose の中なら "mosquitto"、別PCなら IP（例 192.168.1.100）
+      port: 1883
+      keepalive: 30
+    path_publish_s: 1.0            # Web に経路を送る最短間隔 [s]
+
+    # ---- mission_manager ----
+    tasks:
+      wait_mode: "timer"           # timer: 一定時間待つ / confirm: Web から CONFIRM が来るまで待つ
+      load_wait_s: 3.0             # 荷積み待ち [s]
+      unload_wait_s: 3.0           # 荷降ろし待ち [s]
+      return_home_after_task: false
+      home_waypoint: "Home"
+      progress_publish_s: 2.0
+    nav:
+      retries: 2                   # Nav2 が失敗したときのやり直し回数
+      retry_delay_s: 3.0
+      blocked_report_s: 15.0       # この秒数進めなければ Web に BLOCKED を通知
+      fail_after_blocked_s: 60.0   # この秒数進めなければタスク失敗
+    localization:
+      initial_pose: "Home"         # 起動時の現在地（地点名 or "x,y,向きdeg"）
+      resume_pose_max_age_s: 1800.0  # この秒数以内に保存した位置があれば、そこから再開
+      state_dir: "~/.ros/agv_state"
+      lost_quality: 0.25           # AMCL の確からしさがこれ未満で 3 秒続いたら「迷子」→ 停止して Web に通知
+      ok_quality: 0.45
+    publish:
+      state_hz: 2.0                # Web への telemetry
+      offline_timeout_s: 3.0       # 車両の /odom がこの秒数来なければ OFFLINE
