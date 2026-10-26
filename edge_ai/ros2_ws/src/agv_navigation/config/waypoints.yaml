@@ -1,0 +1,50 @@
+# =====================================================================
+#  地点（ウェイポイント）一覧  ※座標は maps/demo_map.yaml（= Nav2 の map 座標） [m]
+#  - Web のタスクの startLocation / targetLocation にここの name か aliases を書く
+#  - theta_deg は到着時の向きの目安（車なので厳密には合わせません）
+#  - 実際の工場/倉庫の地図に変えたら、ここも測り直してください
+#    （ros2 run agv_navigation check_waypoints で全地点が走れる場所かチェックできます）
+# =====================================================================
+waypoints:
+  - name: "Home"
+    x: -4.0
+    y: -4.0
+    theta_deg: 0
+    charger: true            # ここで待機中は status = CHARGING
+    aliases: ["home", "充電ステーション"]
+
+  - name: "Dock-A"
+    x: -3.0
+    y: -0.8
+    theta_deg: 90
+    aliases: ["DockA", "入荷口A"]
+
+  - name: "Dock-B"
+    x: 0.0
+    y: -4.0
+    theta_deg: 0
+    aliases: ["DockB", "入荷口B"]
+
+  - name: "A13"
+    x: -1.0
+    y: -2.5
+    theta_deg: 0
+    aliases: ["棚A13"]
+
+  - name: "Station-1"
+    x: 2.25
+    y: 1.0
+    theta_deg: 90
+    aliases: ["Station1", "1", "部屋"]
+
+  - name: "Station-2"
+    x: 0.0
+    y: 3.5
+    theta_deg: 90
+    aliases: ["Station2", "2"]
+
+  - name: "Station-3"
+    x: 4.15
+    y: -3.5
+    theta_deg: 90
+    aliases: ["Station3", "3"]
