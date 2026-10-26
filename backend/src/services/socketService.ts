@@ -78,6 +78,10 @@ class SocketService {
             return ack?.({ ok: false, error: 'この車両は緊急状態ではありません' });
           }
 
+          // 車両（ラズパイ・PC1）にも解除を送る（docs/agv_protocol.md 2-1）
+          // これを送らないと、Webで解除しても実機は止まったまま動かない
+          mqttService.sendVehicleCommand(vehicleId, { action: 'CLEAR_EMERGENCY' });
+
           await prisma.vehicle.update({
             where: { id: vehicleId },
             data: { status: VehicleStatus.IDLE },
@@ -90,6 +94,13 @@ class SocketService {
           });
 
           await this.recordLog(vehicleId, LogLevel.INFO, `緊急状態を解除しました（操作: ${user.username}）`);
+
+          if (!mqttService.isConnected()) {
+            return ack?.({
+              ok: false,
+              error: 'MQTTブローカーに接続されていないため、解除命令がまだ車両に届いていません',
+            });
+          }
           ack?.({ ok: true });
         } catch (e) {
           console.error('緊急解除の処理エラー:', e);
