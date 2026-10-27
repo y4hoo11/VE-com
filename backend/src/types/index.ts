@@ -55,4 +55,4 @@ export interface LogPayload {
   message: string;
   details?: Record<string, unknown>;
   timestamp: string;
-}
+}

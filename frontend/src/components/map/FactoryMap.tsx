@@ -6,7 +6,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Vehicle } from '../../types';
 import styles from '../../styles/FactoryMap.module.css';
-import mapPgmUrl from './demo_map.pgm?url';
+// 表示する地図（倉庫レイアウト 16m x 10m。元データと作り直し用スクリプトは map/ フォルダ）
+import mapPgmUrl from './warehouse_map.pgm?url';
 
 type FactoryMapProps = {
   vehicles: Vehicle[];
@@ -110,7 +111,10 @@ export const FactoryMap: React.FC<FactoryMapProps> = ({ vehicles }) => {
   }, []);
 
   return (
-    <div className={styles.mapContainer}>
+    <div
+      className={styles.mapContainer}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, padding: '8px', boxSizing: 'border-box' }}
+    >
       <p className={styles.mapText}>
         🗺️ 2Dマップエリア - 稼働車両数: {vehicles.length}台
       </p>
@@ -119,23 +123,16 @@ export const FactoryMap: React.FC<FactoryMapProps> = ({ vehicles }) => {
         {loading ? 'マップ画像を読み込み中...' : debugMsg}
       </div>
 
-      <div
-        style={{
-          width: '300px',
-          height: '300px',
-          border: '2px solid #333',
-          backgroundColor: '#808080',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          margin: '0 auto',
-        }}
-      >
+      {/* 地図の縦横比を保ったまま、空いている場所いっぱいに表示する */}
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         <canvas
           ref={canvasRef}
           style={{
+            position: 'absolute',
+            inset: 0,
             width: '100%',
             height: '100%',
+            objectFit: 'contain',
             imageRendering: 'pixelated',
           }}
         />

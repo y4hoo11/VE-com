@@ -2,6 +2,7 @@
 
 /// <reference types="node" />
 import { PrismaClient, VehicleStatus, TaskStatus, Role } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -9,6 +10,9 @@ async function main() {
   console.log('🌱 データベースの初期化とテストデータの投入を開始します...');
 
   // 1. ユーザーの作成
+  // 開発用の管理者パスワード（.env の SEED_ADMIN_PASSWORD があればそれを使う）
+  const adminPasswordHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD || 'admin123', 10);
+
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
     update: {},
@@ -16,10 +20,18 @@ async function main() {
       id: 'usr-001',
       username: 'admin',
       email: 'admin@example.com',
-      passwordHash: 'hashed_password',
+      passwordHash: adminPasswordHash,
       role: Role.ADMIN,
     },
   });
+
+  // 以前の仮パスワード（'hashed_password'）のままなら、本物のハッシュに置き換える
+  if (adminUser.passwordHash === 'hashed_password') {
+    await prisma.user.update({
+      where: { id: adminUser.id },
+      data: { passwordHash: adminPasswordHash },
+    });
+  }
 
   // 2. 車両 (AGV) の作成
   const vehicleAlpha = await prisma.vehicle.upsert({
@@ -94,4 +106,4 @@ main()
   })
   .finally(async () => {
     await prisma.$disconnect();
-  });
+  });
