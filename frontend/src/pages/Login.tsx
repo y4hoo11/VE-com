@@ -10,7 +10,9 @@
  */
 
 import React, { useState } from 'react';
+import { isAxiosError } from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 import { AUTH_CONFIG, MOCK_ACCOUNTS } from '../config/Auth';
 import type { AuthResult } from '../types/Auth';
 import '../styles/login.css';
@@ -40,15 +42,14 @@ export const Login: React.FC = () => {
 
   const serverLogin = async (u: string, p: string): Promise<AuthResult> => {
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u, password: p }),
-      });
-      if (!res.ok) return { success: false, message: 'サーバーエラーが発生しました' };
-      return await res.json();
-    } catch {
-      return { success: false, message: '通信エラーが発生しました' };
+      const res = await api.post<AuthResult>('/login', { username: u, password: p });
+      return res.data;
+    } catch (err) {
+      // 401/400 のときはサーバーのメッセージ（「ユーザー名またはパスワードが違います」など）を表示
+      if (isAxiosError(err) && err.response?.data?.message) {
+        return { success: false, message: err.response.data.message };
+      }
+      return { success: false, message: 'サーバーに接続できませんでした' };
     }
   };
 
@@ -68,7 +69,7 @@ export const Login: React.FC = () => {
     setLoading(false);
 
     if (result.success) {
-      login(result.user);
+      login(result.user, result.token);
     } else {
       setError(result.message);
     }
@@ -126,4 +127,4 @@ export const Login: React.FC = () => {
       </form>
     </section>
   );
-};
+};

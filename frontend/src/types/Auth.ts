@@ -9,16 +9,17 @@
  */
 
 export interface User {
+  id?: string;
   username: string;
   role: string;
 }
 
 export type AuthResult =
-  | { success: true; user: User }
+  | { success: true; user: User; token?: string }
   | { success: false; message: string };
 
 export interface Account {
   username: string;
   password: string;
   role?: string;
-}
+}

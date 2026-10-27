@@ -1,0 +1,280 @@
+/* ===================================================
+   レイアウトグリッド
+   2分割（カメラ系 / センサー・情報系）
+   左右均等なら 1fr 1fr、カメラ側を少し広げるなら 1.2fr 1fr など調整可
+=================================================== */
+.control-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+/* 左列・右列の共通縦並び設定 */
+.camera-column,
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ===================================================
+   カメラビューア（左上）
+=================================================== */
+.camera-view {
+  background-color: #000;
+  border-radius: 6px;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 9; /* アスペクト比を固定すると安定します */
+}
+
+.no-camera {
+  color: #888;
+  text-align: center;
+}
+
+.no-camera span {
+  font-size: 12px;
+}
+
+.video-stream {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ===================================================
+   WASDコントローラー（カメラの下）
+=================================================== */
+.wasd-controller {
+  background: #fff;
+  padding: 14px;
+  border-radius: 6px;
+  border: 1px solid #ffccc7;
+  text-align: center;
+}
+
+.wasd-title {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.wasd-keys {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.wasd-row {
+  display: flex;
+  gap: 6px;
+}
+
+.key-cap {
+  width: 38px;
+  height: 38px;
+  background: #eee;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  box-shadow: 0 2px 0 #bbb;
+  transition: all 0.1s;
+  user-select: none;
+}
+
+/* キー押下時のスタイル */
+.key-cap.active {
+  background: #ff4d4f;
+  color: #fff;
+  box-shadow: none;
+  transform: translateY(2px);
+}
+
+/* ===================================================
+   アラウンドセンサー画面（カメラの横）
+=================================================== */
+.around-sensor-card {
+  background: #141b24;
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.section-title {
+  color: #d1d9e0;
+  font-size: 14px;
+  font-weight: bold;
+  margin: 0 0 8px 0;
+}
+
+.sensor-display-placeholder {
+  position: relative;
+  background: radial-gradient(circle, #223040 0%, #0d131a 75%);
+  border: 1px solid #2d3b4e;
+  border-radius: 4px;
+  min-height: 200px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vehicle-center-icon {
+  font-size: 2rem;
+  z-index: 2;
+}
+
+.sensor-status-label {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #7997b8;
+  z-index: 2;
+}
+
+/* レーダー同心円エフェクト */
+.radar-wave {
+  position: absolute;
+  border: 1px dashed rgba(64, 150, 255, 0.35);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.wave-1 { width: 110px; height: 110px; }
+.wave-2 { width: 180px; height: 180px; }
+
+/* ===================================================
+   車両情報カード（センサーの下）
+=================================================== */
+.vehicle-info-card {
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  padding: 12px 16px;
+}
+
+.vehicle-info-title {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: bold;
+  color: #333;
+}
+
+.vehicle-info-item {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #4a5568;
+}
+
+.status-highlight {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  background-color: #e6f7ff;
+  color: #1890ff;
+  border: 1px solid #91d5ff;
+}
+/* ===================================================
+   車載メーター風クリアランスソナー（SVGアークスタイル）
+=================================================== */
+.meter-display-area {
+  position: relative;
+  background: #000000;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  min-height: 290px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.sonar-svg-layer {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* 中央の車両本体（縦向き上面図） */
+.car-vertical-body {
+  position: relative;
+  width: 58px;
+  height: 100px;
+  background: #1f2937;
+  border: 2px solid #9ca3af;
+  border-radius: 14px;
+  z-index: 5;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.9);
+  transition: all 0.3s;
+}
+
+.car-vertical-body.danger-body {
+  border-color: #ef4444;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+}
+
+.windshield-v {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 10px;
+  background: #38bdf8;
+  opacity: 0.7;
+}
+
+.windshield-v.front-v {
+  top: 14px;
+  border-radius: 4px 4px 1px 1px;
+}
+
+.windshield-v.rear-v {
+  bottom: 14px;
+  border-radius: 1px 1px 4px 4px;
+}
+
+/* 危険レベルのSVG点滅アニメーション */
+.svg-danger-pulse {
+  animation: svg-pulse 0.5s infinite alternate;
+}
+
+@keyframes svg-pulse {
+  from {
+    stroke-width: 6;
+    opacity: 0.5;
+  }
+  to {
+    stroke-width: 8;
+    opacity: 1;
+  }
+}
+
+.meter-footer-status {
+  position: absolute;
+  bottom: 10px;
+  z-index: 10;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.status-alert-red {
+  color: #f87171;
+  animation: blink-text 0.8s infinite;
+}
+
+.status-ok {
+  color: #6b7280;
+}
