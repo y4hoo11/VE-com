@@ -8,13 +8,15 @@
  *   ユーザー情報（`user`）やログイン/ログアウト関数にアクセスできます。
  */
 
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User } from '../types/Auth';
 import { AUTH_CONFIG } from '../config/Auth';
+import { AUTH_EXPIRED_EVENT } from '../services/api';
+import { socket } from '../services/socket';
 
 interface AuthContextType {
   user: User | null;
-  login: (user: User) => void;
+  login: (user: User, token?: string) => void;
   logout: () => void;
 }
 
@@ -26,15 +28,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return raw ? (JSON.parse(raw) as User) : null;
   });
 
-  const login = (userData: User) => {
+  const login = (userData: User, token?: string) => {
     sessionStorage.setItem(AUTH_CONFIG.sessionKey, JSON.stringify(userData));
+    if (token) sessionStorage.setItem(AUTH_CONFIG.tokenKey, token);
     setUser(userData);
   };
 
   const logout = () => {
     sessionStorage.removeItem(AUTH_CONFIG.sessionKey);
+    sessionStorage.removeItem(AUTH_CONFIG.tokenKey);
     setUser(null);
   };
+
+  // APIが401を返したら（トークン期限切れなど）自動でログアウトしてログイン画面に戻す
+  useEffect(() => {
+    const handleExpired = () => {
+      sessionStorage.removeItem(AUTH_CONFIG.sessionKey);
+      sessionStorage.removeItem(AUTH_CONFIG.tokenKey);
+      setUser(null);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleExpired);
+  }, []);
+
+  // ログイン中だけリアルタイム通信をつなぐ
+  useEffect(() => {
+    if (user) {
+      socket.connect();
+    } else {
+      socket.disconnect();
+    }
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, login, logout }}>
@@ -50,4 +74,4 @@ export const useAuth = () => {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+};

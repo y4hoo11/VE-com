@@ -5,13 +5,20 @@ import { VehicleStatus, LogLevel } from '@prisma/client';
 
 class MqttService {
   init() {
-    mqttClient.subscribe(['agv/+/telemetry', 'agv/+/emergency'], undefined, (err: Error | null) => {
-      if (!err) {
-        console.log('[MQTT] 購読開始: agv/+/telemetry, agv/+/emergency');
-      } else {
-        console.error('[MQTT] 購読エラー:', err);
-      }
-    });
+    const subscribeTopics = () => {
+      mqttClient.subscribe(['agv/+/telemetry', 'agv/+/emergency'], undefined, (err: Error | null) => {
+        if (!err) {
+          console.log('[MQTT] 購読開始: agv/+/telemetry, agv/+/emergency');
+        } else {
+          console.error('[MQTT] 購読エラー:', err);
+        }
+      });
+    };
+
+    // 接続（再接続を含む）のたびに購読する
+    // 起動直後の接続に失敗しても、つながった時点で必ず購読される
+    mqttClient.on('connect', subscribeTopics);
+    if (mqttClient.connected) subscribeTopics();
 
     mqttClient.on('message', async (topic, payload) => {
       try {
@@ -83,7 +90,7 @@ class MqttService {
             id: createdLog.id.toString(),
             vehicleId: agvId,
             level: LogLevel.ERROR,
-            message: `${agvId} 緊急停止: ${reason}`,
+            message: createdLog.message, // DBに保存した内容と同じ文言にそろえる
             details: message,
             timestamp: createdLog.timestamp.toISOString(),
           });
@@ -100,6 +107,11 @@ class MqttService {
     console.log(`[MQTT送信] ${topic}:`, command);
   }
 
+  // MQTTブローカーにつながっているか
+  isConnected() {
+    return mqttClient.connected;
+  }
+
   sendEmergencyStop(agvId: string) {
     const topic = `agv/${agvId}/command`;
     mqttClient.publish(topic, JSON.stringify({ action: 'EMERGENCY_STOP' }));
@@ -107,4 +119,4 @@ class MqttService {
   }
 }
 
-export const mqttService = new MqttService();
+export const mqttService = new MqttService();

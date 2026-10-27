@@ -50,6 +50,8 @@ class DispatchService {
       emergencyReason: null,
     });
 
+    socketService.broadcastTasksChanged();
+
     // 4. DBへログ書き込み & フロントへ新着ログ配信
     const createdLog = await prisma.vehicleLog.create({
       data: {
@@ -71,4 +73,4 @@ class DispatchService {
   }
 }
 
-export const dispatchService = new DispatchService();
+export const dispatchService = new DispatchService();
