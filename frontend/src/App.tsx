@@ -10,7 +10,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { Control } from './pages/Control';
 import { TaskOnly } from './pages/Task';
-import { SettingCarousel } from './components/setting/SettingCarousel'; // 設定画面コンポーネントをインポート
+import { SettingCarousel } from './components/setting/SettingCarousel';
 import './App.css';
 
 const Dashboard: React.FC = () => {
@@ -34,6 +34,16 @@ const Dashboard: React.FC = () => {
         </div>
       </header>
 
+      {/* ★開閉ボタン（左上のサイドボタンの下に配置） */}
+      {/* 開閉ボタン（サイドボタンの下） */}
+<button
+  type="button"
+  className="nav-side-toggle"
+  onClick={() => setIsNavOpen(!isNavOpen)}
+  aria-expanded={isNavOpen}
+>
+  {isNavOpen ? '閉じる' : '画面選択'}
+</button>
       {/* メイン画面エリア */}
       <main className="app-main">
         <Routes>
@@ -49,19 +59,8 @@ const Dashboard: React.FC = () => {
         </Routes>
       </main>
 
-      {/* ==================== 下部：可変ナビゲーションバー ==================== */}
+      {/* ==================== 下部：ナビゲーションバー ==================== */}
       <div className="bottom-nav-wrapper">
-        {/* 開閉トグルボタン */}
-        <button
-          type="button"
-          onClick={() => setIsNavOpen(!isNavOpen)}
-          className="nav-toggle-btn"
-        >
-          {isNavOpen ? '▼ 画面選択を閉じる' : '▲ 画面選択を開く'}
-        </button>
-
-        {/* 開閉するパネル本体 */}
-        {/* 開閉するパネル本体 */}
         {isNavOpen && (
           <div className="nav-panel">
             <button
@@ -80,11 +79,10 @@ const Dashboard: React.FC = () => {
               📋 タスク表示専用
             </button>
 
-            {/* タスク表示専用ボタンの下に追加した設定ボタン */}
             <button
               type="button"
               onClick={() => navigate('/settings')}
-              className={`nav-btn ${location.pathname === '/settings' ? 'active' : ''}`}
+              className={`nav-btn ${location.pathname === '/settings' ? 'active' : '' }`}
             >
               ⚙️ 設定
             </button>
@@ -109,4 +107,4 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
   );
-}
+}
