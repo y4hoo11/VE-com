@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Vehicle } from '../../types';
 import styles from '../../styles/FactoryMap.module.css';
 // 表示する地図（倉庫レイアウト 16m x 10m。元データと作り直し用スクリプトは map/ フォルダ）
-import mapPgmUrl from './warehouse_map.pgm?url';
+import mapPgmUrl from './warehouse_b.pgm?url';
 
 type FactoryMapProps = {
   vehicles: Vehicle[];
