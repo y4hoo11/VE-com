@@ -19,6 +19,7 @@
 .login-card {
   position: relative;
   overflow: hidden;
+  box-sizing: border-box;
   width: 100%;
   min-height: 100vh;
   padding: 56px 64px;
