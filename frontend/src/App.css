@@ -270,20 +270,56 @@
   backdrop-filter: blur(4px);
 }
 
-/* ナビゲーション切り替えボタン */
-.nav-btn {
-  padding: 8px 16px;
-  cursor: pointer;
-  background-color: #fff;
-  color: #333;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: normal;
+/* 下部ナビ開閉ボタン（左上サイドボタンの下に配置） */
+.dashboard-container {
+  --side-btn-left: 12px;    /* サイドボタンの左端（コンテナ左端からの距離） */
+  --side-btn-top: 65px;     /* サイドボタンの上端（コンテナ上端からの距離） */
+  --side-btn-height: 90px;  /* サイドボタンの高さ */
+  --side-btn-gap: 8px;      /* サイドボタンとの間隔 */
+}
 
-  &.active {
-    font-weight: bold;
-    background-color: #1890ff;
-    color: #fff;
+.nav-side-toggle {
+  position: absolute;                 /* fixed → absolute */
+  left: var(--side-btn-left);         /* 0 → 変数 */
+  top: calc(var(--side-btn-top) + var(--side-btn-height) + var(--side-btn-gap));
+  z-index: 10;
+  width: 32px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #c72424;
+  color: #fff;
+  border: none;
+  border-radius: 6px;                 /* 画面端から離れたので、四隅とも丸めた */
+  cursor: pointer;
+  user-select: none;
+  writing-mode: vertical-rl;
+  letter-spacing: 2px;
+  font-weight: bold;
+  font-size: 12px;
+
+  &:focus-visible {
+    outline: 2px solid #1890ff;
+    outline-offset: 2px;
   }
+}
+
+.app-main {
+  /* 既存の指定（flex: 1; overflow: hidden; position: relative;）はそのまま */
+  isolation: isolate;   /* 台形をこの領域の中に閉じ込め、コンテンツの背面に置く */
+}
+
+.app-main::before {
+  content: '';
+  position: absolute;
+  bottom: 0;                   /* top: 0 → bottom: 0 */
+  left: 0;
+  z-index: 5;
+  width: 360px;
+  height: 140px;
+  background: #1890ff;
+  opacity: 0.5;
+  clip-path: polygon(0 0, 80% 0, 100% 100%, 0 100%);   /* 上辺が短く、下辺が長い台形（左下に張り付く形） */
+  pointer-events: none;
 }
