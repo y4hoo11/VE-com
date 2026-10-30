@@ -24,10 +24,32 @@ export const getTasks = async (req: Request, res: Response) => {
   try {
     // 既定ではキャンセル済み(論理削除)を除外する。履歴用途は ?includeCancelled=true
     const includeCancelled = getStringParam(req.query.includeCancelled) === 'true';
- 
+    // ?view=active … 進行中（未配車・配車済み・実行中）だけ
+    // ?view=done   … 終わったもの（完了・失敗・キャンセル）だけ。終わった日時の新しい順
+    const view = getStringParam(req.query.view);
+
+    const ACTIVE: TaskStatus[] = [TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS];
+    const DONE: TaskStatus[] = [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED];
+
+    const where =
+      view === 'active'
+        ? { status: { in: ACTIVE } }
+        : view === 'done'
+          ? { status: { in: DONE } }
+          : includeCancelled
+            ? undefined
+            : { status: { not: TaskStatus.CANCELLED } };
+
+    const orderBy =
+      view === 'done'
+        ? [{ completedAt: { sort: 'desc' as const, nulls: 'last' as const } }, { updatedAt: 'desc' as const }]
+        : [{ createdAt: 'desc' as const }];
+
     const tasks = await prisma.task.findMany({
-      where: includeCancelled ? undefined : { status: { not: TaskStatus.CANCELLED } },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy,
+      // 完了タブは件数が増え続けるので、新しい100件までにする
+      ...(view === 'done' ? { take: 100 } : {}),
       include: {
         assignedVehicle: true,
         createdByUser: {

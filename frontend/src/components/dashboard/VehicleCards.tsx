@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useVehicles } from '../../hooks/useVehicles';
+import { vehicleStatusLabel } from '../../constants/statusLabels';
 import styles from '../../styles/VehicleCards.module.css';
 
 export type { VehicleItem } from '../../hooks/useVehicles';
@@ -53,7 +54,7 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
                 hasEmergency ? styles.statusEmergency : styles.statusNormal
               }`}
             >
-              {hasEmergency ? '緊急事態発生' : v.status}
+              {hasEmergency ? '緊急事態発生' : vehicleStatusLabel(v.status)}
             </div>
 
             {/* 行2: 詳細ボタン / 緊急詳細 */}
@@ -72,7 +73,7 @@ export const VehicleCards: React.FC<VehicleCardsProps> = ({
             <div className={styles.emergencyInfo}>
               <div className={styles.emergencyLabel}>状態・詳細</div>
               <div className={styles.emergencyBody}>
-                <span>{hasEmergency ? (v.emergencyReason || 'エラー発生中') : `座標: X=${v.currentX}, Y=${v.currentY}`}</span>
+                <span>{hasEmergency ? (v.emergencyReason || 'エラー発生中') : `位置: (${v.currentX.toFixed(2)}, ${v.currentY.toFixed(2)}) m`}</span>
                 {hasEmergency && onAcknowledgeEmergency && (
                   <button
                     type="button"

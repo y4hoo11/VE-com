@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { useSocketEvent } from '../../hooks/useSocketEvent';
+import { taskStatusLabel } from '../../constants/statusLabels';
 import styles from '../../styles/TaskPanel.module.css';
 
 export interface TaskItem {
@@ -17,17 +18,28 @@ export interface TaskItem {
   priority: number;
   status: string;
   scheduledAt?: string;
+  completedAt?: string | null;
   createdByUserId?: string;
   createdAt: string;
 }
 
 type PanelMode = 'normal' | 'add' | 'delete';
+// 表示中のタブ：進行中（未配車・配車済み・実行中）／完了（完了・失敗・キャンセル）
+type TaskTab = 'active' | 'done';
+
+// 終わった状態ごとの色（完了=緑、失敗=赤、キャンセル=灰）
+const DONE_BADGE_CLASS: Record<string, string> = {
+  COMPLETED: 'badgeCompleted',
+  FAILED: 'badgeFailed',
+  CANCELLED: 'badgeCancelled',
+};
 
 export const TaskPanel: React.FC = () => {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [iconPosition, setIconPosition] = useState<'top' | 'bottom'>('top');
   const [mode, setMode] = useState<PanelMode>('normal');
   const [showSettings, setShowSettings] = useState<boolean>(false);
+  const [tab, setTab] = useState<TaskTab>('active');
 
   // フォーム用ステート
   const [newTaskName, setNewTaskName] = useState('');
@@ -39,23 +51,24 @@ export const TaskPanel: React.FC = () => {
   const currentUserId = 'usr-001'; 
 
   // データベースからタスク一覧を取得 (GET)
-  const fetchTasks = async () => {
+  const fetchTasks = async (target: TaskTab = tab) => {
     try {
-      const response = await api.get<TaskItem[]>('/tasks');
+      const response = await api.get<TaskItem[]>('/tasks', { params: { view: target } });
       setTasks(response.data);
     } catch (error) {
       console.error('タスクの取得に失敗しました:', error);
     }
   };
 
+  // タブを切り替えたら、そのタブの一覧を取り直す
   useEffect(() => {
-    fetchTasks();
-  }, []);
+    fetchTasks(tab);
+  }, [tab]);
 
   // 誰かがタスクを追加・削除・更新したら一覧を取り直す（別の画面・別の人の操作も反映される）
-  useSocketEvent('tasks:changed', fetchTasks);
+  useSocketEvent('tasks:changed', () => fetchTasks());
   // 再接続したときも、切断中の変化を取り直す
-  useSocketEvent('connect', fetchTasks);
+  useSocketEvent('connect', () => fetchTasks());
 
   // 追加処理 (POST)
   const handleCreateTask = async (e?: React.FormEvent) => {
@@ -206,8 +219,30 @@ export const TaskPanel: React.FC = () => {
       <div className={styles.mainContent}>
         <h3 className={styles.title}>タスク管理 (DB連携)</h3>
 
-        {/* 追加モード */}
-        {mode === 'add' && (
+        {/* 進行中／完了のタブ */}
+        <div className={styles.tabs} role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'active'}
+            className={`${styles.tab} ${tab === 'active' ? styles.tabActive : ''}`}
+            onClick={() => setTab('active')}
+          >
+            進行中
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'done'}
+            className={`${styles.tab} ${tab === 'done' ? styles.tabActive : ''}`}
+            onClick={() => setTab('done')}
+          >
+            完了
+          </button>
+        </div>
+
+        {/* 追加モード（進行中タブのときだけ） */}
+        {mode === 'add' && tab === 'active' && (
           <form onSubmit={handleCreateTask} className={styles.addForm}>
             <div className={styles.formRow}>
               <input
@@ -257,23 +292,37 @@ export const TaskPanel: React.FC = () => {
 
         {/* タスクリスト */}
         <div className={styles.taskList}>
+          {tasks.length === 0 && (
+            <p className={styles.emptyText}>
+              {tab === 'active' ? '進行中のタスクはありません' : '完了したタスクはありません'}
+            </p>
+          )}
           {tasks.map((t) => (
-            <div key={t.id} className={styles.taskItem}>
+            <div key={t.id} className={`${styles.taskItem} ${tab === 'done' ? styles.taskItemDone : ''}`}>
               <div>
                 <div className={styles.taskTitle}>
                   {t.title} <span className={styles.taskCode}>(ID: {t.id.slice(0, 6)})</span>
                 </div>
                 <div className={styles.taskMeta}>
-                  <span>ステータス: {t.status}</span>
+                  {tab === 'done' ? (
+                    <span className={`${styles.statusBadge} ${styles[DONE_BADGE_CLASS[t.status]] ?? ''}`}>
+                      {taskStatusLabel(t.status)}
+                    </span>
+                  ) : (
+                    <span>状態: {taskStatusLabel(t.status)}</span>
+                  )}
                   {t.priority && <span>優先度: {t.priority}</span>}
-                  {t.scheduledAt && (
+                  {tab === 'active' && t.scheduledAt && (
                     <span>期限: {new Date(t.scheduledAt).toLocaleDateString()}</span>
+                  )}
+                  {tab === 'done' && t.completedAt && (
+                    <span>終了: {new Date(t.completedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                   )}
                 </div>
               </div>
 
-              {/* 削除モード */}
-              {mode === 'delete' && (
+              {/* 削除モード（進行中タブのときだけ。終わったタスクは記録として残す） */}
+              {mode === 'delete' && tab === 'active' && (
                 <button
                   type="button"
                   onClick={() => handleDeleteTask(t.id)}

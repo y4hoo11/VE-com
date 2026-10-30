@@ -8,6 +8,7 @@ import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EmergencyBrake } from './EmergencyControl';
 import { useVehicles } from '../hooks/useVehicles';
+import { vehicleStatusLabel } from '../constants/statusLabels';
 
 export const EmergencyPage: React.FC = () => {
   const { id } = useParams();
@@ -30,7 +31,7 @@ export const EmergencyPage: React.FC = () => {
 
   return (
     <EmergencyBrake
-      selectedVehicle={{ id: vehicle.id, name: vehicle.name || vehicle.id, status: vehicle.status }}
+      selectedVehicle={{ id: vehicle.id, name: vehicle.name || vehicle.id, status: vehicleStatusLabel(vehicle.status) }}
       onBack={goBack}
     />
   );
