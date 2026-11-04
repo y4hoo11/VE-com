@@ -152,6 +152,20 @@ class SocketService {
     }
   }
 
+  // 車両の登録・削除があったことを知らせる（フロントはこれを受けて車両一覧を取り直す）
+  broadcastVehiclesChanged() {
+    if (this.io) {
+      this.io.emit('vehicles:changed');
+    }
+  }
+
+  // 運行の設定が変わったことを知らせる
+  broadcastSettingsChanged(settings: { ops: { battWarn: number; battMin: number } }) {
+    if (this.io) {
+      this.io.emit('settings:changed', settings);
+    }
+  }
+
   // タスクに変化があったことを知らせる（フロントはこれを受けて一覧を取り直す）
   broadcastTasksChanged() {
     if (this.io) {

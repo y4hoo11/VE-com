@@ -1,6 +1,7 @@
 // 画面全体の状態と操作。
 // データはバックエンド（REST API と Socket.IO）から取り、画面はここを通して読み書きする。
 // まだバックエンドに無い操作（一時停止・移動の指示・ユーザー登録など）は NOT_SUPPORTED で止める。
+// 運行の設定（バッテリーのしきい値）はサーバーに保存し、全端末で共有する。
 import { useSyncExternalStore } from 'react';
 import { isAxiosError } from 'axios';
 import { api } from '../services/api';
@@ -122,7 +123,8 @@ interface VehicleUpdate {
 // ---------------------------------------------------------------
 // 端末ごとに覚えておく表示の設定（ブラウザに保存）
 const PREF_KEY = 'vecom_prefs';
-type Prefs = { theme: 'light' | 'dark'; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; ops: { battWarn: number; battMin: number } };
+type Prefs = { theme: 'light' | 'dark'; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean };
+export type OpsSettings = { battWarn: number; battMin: number };
 const loadPrefs = (): Partial<Prefs> => {
   try {
     return JSON.parse(localStorage.getItem(PREF_KEY) || '{}') as Partial<Prefs>;
@@ -150,8 +152,8 @@ export const S = {
   view: { grid: false, path: true, labels: true, ...prefs.view },
   theme: (prefs.theme ?? 'light') as 'light' | 'dark',
   sound: prefs.sound ?? true,
-  // 運行の設定（いまはこの端末にだけ保存。将来は system_settings に保存する）
-  ops: { battWarn: 30, battMin: 20, maxSpeed: 0.3, obstacle: 0.45, ...prefs.ops },
+  // 運行の設定。battWarn・battMin はサーバー（GET /api/settings）から読む。maxSpeed・obstacle は表示だけ
+  ops: { battWarn: 30, battMin: 20, maxSpeed: 0.3, obstacle: 0.45 },
   seq: { note: 1, toast: 1 },
 };
 
@@ -175,7 +177,7 @@ export function useStore() {
 // 表示の設定をブラウザに保存する
 export function savePrefs() {
   try {
-    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound, ops: { battWarn: S.ops.battWarn, battMin: S.ops.battMin } };
+    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound };
     localStorage.setItem(PREF_KEY, JSON.stringify(p));
   } catch {
     /* 保存できない環境では何もしない */
@@ -280,7 +282,7 @@ function toVehicle(a: ApiVehicle, prev?: Vehicle): Vehicle {
     mode: 'IDLE',
     err: prev?.status === 'ERROR' && a.status === 'ERROR' ? prev.err : null,
     prevStatus: a.status,
-    camera: '', // カメラ映像のURLは、車両の登録APIができたら保存する
+    camera: '', // カメラ映像のURLは、保存する仕組みができたら入れる
     lastHb: ms(a.lastHeartbeat) ?? 0,
   };
 }
@@ -330,6 +332,25 @@ async function loadLogs() {
   S.logs = res.data.map(toLog);
 }
 
+async function loadSettings() {
+  const res = await api.get<{ ops: OpsSettings }>('/settings');
+  applyOps(res.data.ops);
+}
+function applyOps(o: Partial<OpsSettings> | undefined) {
+  if (typeof o?.battWarn === 'number') S.ops.battWarn = o.battWarn;
+  if (typeof o?.battMin === 'number') S.ops.battMin = o.battMin;
+}
+
+// ログ画面で取ったログ（S.logs に無い古いもの）も、ドロワーで開けるように覚えておく
+const pagedLogs = new Map<number, Log>();
+export function keepLogs(list: Log[]) {
+  if (pagedLogs.size > 5000) pagedLogs.clear();
+  list.forEach((l) => pagedLogs.set(l.id, l));
+}
+export const findLog = (id: number) => S.logs.find((x) => x.id === id) ?? pagedLogs.get(id);
+export { toLog };
+export type { ApiLog };
+
 export async function loadTaskHistory(id: string) {
   try {
     const res = await api.get<ApiTask>(`/tasks/${id}`);
@@ -347,7 +368,7 @@ export async function loadTaskHistory(id: string) {
 
 async function reloadAll() {
   try {
-    await Promise.all([loadVehicles(), loadTasks(), loadLogs()]);
+    await Promise.all([loadVehicles(), loadTasks(), loadLogs(), loadSettings()]);
     relink();
     S.loaded = true;
     emit();
@@ -440,6 +461,7 @@ function listen() {
     if (l.level === 'ERROR' && l.vid) {
       const v = veh(l.vid);
       S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
+      if (S.sound) playAlarm();
       // 異常の理由をログで補う（vehicle:update より後に届いた場合）
       if (v && v.status === 'ERROR' && v.err?.code === 'UNKNOWN') makeErr(v);
     }
@@ -448,6 +470,23 @@ function listen() {
 
   socket.on('tasks:changed', () => {
     reloadTasks();
+  });
+
+  // 車両の登録・削除
+  socket.on('vehicles:changed', () => {
+    loadVehicles()
+      .then(() => {
+        relink();
+        if (S.drawer?.type === 'vehicle' && !veh(S.drawer.id)) S.drawer = null;
+        emit();
+      })
+      .catch((e) => console.error('車両の取得に失敗しました:', e));
+  });
+
+  // 運行の設定の変更（ほかの端末で保存されたとき）
+  socket.on('settings:changed', (st: { ops?: OpsSettings }) => {
+    applyOps(st?.ops);
+    emit();
   });
 }
 
@@ -701,9 +740,118 @@ export function candidates(tid: string) {
 }
 
 // ---------------------------------------------------------------
-// 設定（ユーザー・車両）— APIが無いので未対応
+// 設定（ユーザー）— APIが無いので未対応
 // ---------------------------------------------------------------
 export const saveUser = (_d: { id?: string; name: string; email: string; role: Role }) => notSupported();
 export const askDeleteUser = (_id: string) => notSupported();
-export const saveVehicle = (_d: { id: string; name: string; camera: string }, _isNew: boolean) => notSupported();
-export const askDeleteVehicle = (_id: string) => notSupported();
+
+// ---------------------------------------------------------------
+// 設定（車両）— POST / PATCH / DELETE /api/vehicles（ADMIN のみ）
+// ---------------------------------------------------------------
+// 成功したら true。失敗したら Error（画面にそのまま出す文言）を投げる
+export async function saveVehicle(d: { id: string; name: string }, isNew: boolean) {
+  try {
+    if (isNew) await api.post('/vehicles', d);
+    else await api.patch(`/vehicles/${encodeURIComponent(d.id)}`, { name: d.name });
+  } catch (e) {
+    throw new Error(errMsg(e, isNew ? '車両の登録に失敗しました' : '車両の保存に失敗しました'));
+  }
+  // 一覧の更新は vehicles:changed / vehicle:update で届くが、届く前に画面を合わせておく
+  const v = veh(d.id);
+  if (v) v.name = d.name;
+  else await loadVehicles().then(relink).catch(() => {});
+  emit();
+  toast(isNew ? `${d.name}（${d.id}）を登録しました` : `${d.name} を保存しました`, 'ok');
+  return true;
+}
+
+export function askDeleteVehicle(id: string) {
+  const v = veh(id);
+  if (!v) return;
+  openModal({
+    kind: 'confirm',
+    title: `${v.name}（${v.id}）を削除`,
+    body: 'この車両を一覧から削除します。',
+    detail: [
+      'この車両のログもすべて消えます（元に戻せません）。',
+      '割り当て済み・実行中のタスクがある車両は削除できません。',
+      '車両が telemetry を送り続けている場合、届いた時点で自動的に再登録されます。',
+    ],
+    check: 'ログも消えることを確認しました',
+    ok: '削除する',
+    danger: true,
+    onOk: () => deleteVehicle(id),
+  });
+}
+
+async function deleteVehicle(id: string) {
+  const v = veh(id);
+  try {
+    await api.delete(`/vehicles/${encodeURIComponent(id)}`);
+    S.vehicles = S.vehicles.filter((x) => x.id !== id);
+    S.logs = S.logs.filter((l) => l.vid !== id);
+    if (S.drawer?.type === 'vehicle' && S.drawer.id === id) S.drawer = null;
+    emit();
+    toast(`${v?.name ?? id} を削除しました`, 'warn');
+  } catch (e) {
+    toast(errMsg(e, '車両の削除に失敗しました'), 'error');
+  }
+}
+
+// 【仮】テスト用：車両を手動でオンライン／オフラインにする（実機なしで画面の動きを確かめるため）
+// POST /api/vehicles/:id/test-online。実機の確認ができるようになったら消す
+export async function setTestOnline(id: string, online: boolean) {
+  const v = veh(id);
+  try {
+    await api.post(`/vehicles/${encodeURIComponent(id)}/test-online`, { online });
+    toast(`【テスト】${v?.name ?? id} を${online ? 'オンライン' : 'オフライン'}にしました`, online ? 'ok' : 'warn');
+  } catch (e) {
+    toast(errMsg(e, 'オンライン・オフラインの切り替えに失敗しました'), 'error');
+  }
+}
+
+// ---------------------------------------------------------------
+// 運行の設定 — PUT /api/settings（ADMIN のみ）
+// ---------------------------------------------------------------
+export async function saveOps(o: OpsSettings) {
+  try {
+    const res = await api.put<{ ops: OpsSettings }>('/settings', { ops: o });
+    applyOps(res.data.ops);
+    emit();
+    toast('運行の設定を保存しました', 'ok');
+  } catch (e) {
+    toast(errMsg(e, '運行の設定の保存に失敗しました'), 'error');
+  }
+}
+
+// ---------------------------------------------------------------
+// 異常のときの音（音のファイルは使わず、ブラウザで鳴らす）
+// ---------------------------------------------------------------
+let audioCtx: AudioContext | null = null;
+let lastAlarm = 0;
+export function playAlarm(force = false) {
+  const t = now();
+  if (!force && t - lastAlarm < 3000) return; // 続けて届いても3秒に1回まで
+  lastAlarm = t;
+  try {
+    audioCtx ??= new AudioContext();
+    if (audioCtx.state === 'suspended') void audioCtx.resume();
+    const ctx = audioCtx;
+    // ピッ・ピッ・ピッ（880Hz を3回）
+    [0, 0.25, 0.5].forEach((d) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = 880;
+      const st = ctx.currentTime + d;
+      gain.gain.setValueAtTime(0.0001, st);
+      gain.gain.exponentialRampToValueAtTime(0.15, st + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, st + 0.18);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(st);
+      osc.stop(st + 0.2);
+    });
+  } catch {
+    /* 音を鳴らせない環境では何もしない */
+  }
+}

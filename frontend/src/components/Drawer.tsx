@@ -8,6 +8,7 @@ import {
   closeDrawer,
   confirmLoad,
   estop,
+  findLog,
   nav,
   openModal,
   openTask,
@@ -293,7 +294,7 @@ function TaskBody({ id }: { id: string }) {
 // ---------------------------------------------------------------
 function LogBody({ id }: { id: number }) {
   useStore();
-  const l = S.logs.find((x) => x.id === id);
+  const l = findLog(id);
   if (!l) return <div className="text-slate-400">このログは見つかりません</div>;
   const v = veh(l.vid);
   return (

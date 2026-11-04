@@ -50,7 +50,7 @@ export const requireAuth = (req: Request, res: Response, next: NextFunction) => 
 /**
  * 特定のロールだけ許可するミドルウェア（requireAuth の後に使う）
  * 例: router.delete('/users/:id', requireRole(Role.ADMIN), deleteUser);
- * ※ 現時点ではどのルートにも使っていない（ロール制御は今後）
+ * いまは車両の登録・編集・削除と、運行の設定の変更に使っている
  */
 export const requireRole =
   (...roles: Role[]) =>

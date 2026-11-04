@@ -1,11 +1,33 @@
 // 地図（SVG）。車両・経路・地点を描き、地図の操作モード（移動先・現在地の指定）も受け持つ
-import { useRef, type PointerEvent } from 'react';
+// ズーム：ホイール（カーソルの位置を中心に）か右下のボタン。拡大中は何もない所をドラッグして動かす
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { COL, MAP_H, MAP_W, OFFICE, PAUSED_COL, SHELVES, WAYPOINTS, ZONES, wpByName, type Pt } from '../store/data';
 import { askGoto, cancelMapMode, closePop, mapModeClick, nearestWp, setMapCursor, togglePop, useStore, veh } from '../store/store';
 import { cx } from './ui';
 
 const X = (x: number) => x * 100;
 const Y = (y: number) => (MAP_H - y) * 100;
+
+// 表示範囲（SVG の viewBox）。FULL が全体表示
+type View = { x: number; y: number; w: number; h: number };
+const FULL: View = { x: -40, y: -40, w: MAP_W * 100 + 80, h: MAP_H * 100 + 80 };
+const MAX_ZOOM = 8;
+const STEP = 1.25;
+
+// 中心 (cx, cy) を固定して k 倍に拡大（k < 1 で縮小）し、地図の外に出すぎないようにする
+function zoomView(v: View, k: number, cx: number, cy: number): View {
+  const w = Math.min(FULL.w, Math.max(FULL.w / MAX_ZOOM, v.w / k));
+  const h = (w / FULL.w) * FULL.h;
+  const r = w / v.w;
+  return clampView({ x: cx - (cx - v.x) * r, y: cy - (cy - v.y) * r, w, h });
+}
+function clampView(v: View): View {
+  return {
+    ...v,
+    x: Math.min(FULL.x + FULL.w - v.w, Math.max(FULL.x, v.x)),
+    y: Math.min(FULL.y + FULL.h - v.h, Math.max(FULL.y, v.y)),
+  };
+}
 
 type Props = {
   mapKey: 'main' | 'detail' | 'wp';
@@ -18,6 +40,34 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
   const s = useStore();
   const ref = useRef<SVGSVGElement>(null);
   const mm = mapKey === 'wp' ? null : s.mapMode;
+  const [view, setView] = useState<View>(FULL);
+  const pan = useRef<{ px: number; py: number; v: View; scale: number } | null>(null);
+  const zoomed = view.w < FULL.w - 0.5;
+
+  // 画面上の点 → SVG の座標（viewBox の単位）
+  const toSvg = (clientX: number, clientY: number) => {
+    const svg = ref.current!;
+    const p = svg.createSVGPoint();
+    p.x = clientX;
+    p.y = clientY;
+    return p.matrixTransform(svg.getScreenCTM()!.inverse());
+  };
+
+  // ホイールでズーム（ページがスクロールしないよう passive: false で登録する）
+  useEffect(() => {
+    const svg = ref.current;
+    if (!svg) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const c = toSvg(e.clientX, e.clientY);
+      const k = e.deltaY < 0 ? STEP : 1 / STEP;
+      setView((v) => zoomView(v, k, c.x, c.y));
+    };
+    svg.addEventListener('wheel', onWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const zoomBtn = (k: number) => setView((v) => zoomView(v, k, v.x + v.w / 2, v.y + v.h / 2));
   const selected = s.drawer?.type === 'vehicle' ? s.drawer.id : focusId;
 
   const toWorld = (e: PointerEvent): Pt => {
@@ -39,9 +89,24 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
     const wn = t.closest('[data-wp]')?.getAttribute('data-wp');
     if (wn) return onWpClick ? onWpClick(wn) : togglePop({ kind: 'wp', id: wn, x: e.clientX, y: e.clientY });
     closePop();
+    // 何もない所を押したら、ドラッグで地図を動かす（拡大しているときだけ）
+    if (zoomed) {
+      pan.current = { px: e.clientX, py: e.clientY, v: view, scale: ref.current!.getScreenCTM()!.a };
+      (e.currentTarget as Element).setPointerCapture(e.pointerId);
+    }
   };
   const onMove = (e: PointerEvent) => {
+    const p = pan.current;
+    if (p) {
+      const dx = (e.clientX - p.px) / p.scale;
+      const dy = (e.clientY - p.py) / p.scale;
+      setView(clampView({ ...p.v, x: p.v.x - dx, y: p.v.y - dy }));
+      return;
+    }
     if (mm) setMapCursor(toWorld(e));
+  };
+  const onUp = () => {
+    pan.current = null;
   };
 
   const vehicles = [...s.vehicles].sort((a) => (a.id === selected ? 1 : -1));
@@ -52,11 +117,13 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
       <svg
         ref={ref}
         data-pop-trigger
-        viewBox={`-40 -40 ${MAP_W * 100 + 80} ${MAP_H * 100 + 80}`}
+        viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
         preserveAspectRatio="xMidYMid meet"
-        className={cx('h-full w-full select-none', mm && 'cursor-crosshair')}
+        className={cx('h-full w-full touch-none select-none', mm ? 'cursor-crosshair' : zoomed && 'cursor-grab')}
         onPointerDown={onDown}
         onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
       >
         <defs>
           <marker id={`arr-${mapKey}`} viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto">
@@ -162,6 +229,17 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
           </g>
         )}
       </svg>
+      <div className="absolute right-2 bottom-2 z-10 flex flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-sm shadow dark:border-slate-600 dark:bg-slate-800">
+        <button type="button" title="拡大" className="h-8 w-8 hover:bg-slate-100 disabled:opacity-40 dark:hover:bg-slate-700" disabled={view.w <= FULL.w / MAX_ZOOM + 0.5} onClick={() => zoomBtn(STEP)}>
+          ＋
+        </button>
+        <button type="button" title="縮小" className="h-8 w-8 border-t border-slate-200 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-700" disabled={!zoomed} onClick={() => zoomBtn(1 / STEP)}>
+          －
+        </button>
+        <button type="button" title="全体を表示" className="h-8 w-8 border-t border-slate-200 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:hover:bg-slate-700" disabled={!zoomed} onClick={() => setView(FULL)}>
+          ⤢
+        </button>
+      </div>
       {mm && <MapModeBar />}
     </div>
   );

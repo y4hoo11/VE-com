@@ -5,6 +5,7 @@ import { dispatchService } from '../services/dispatchService';
 import { socketService } from '../services/socketService';
 import { mqttService } from '../services/mqttService';
 import { TaskStatus, VehicleStatus, LogLevel } from '@prisma/client';
+import { loadOpsSettings } from './settingsController';
  
 // ヘルパー関数: string | string[] から安全に単一の string を取り出す
 const getStringParam = (param: unknown): string | undefined => {
@@ -265,6 +266,33 @@ export const assignTask = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'taskId と vehicleId は必須です' });
     }
  
+    // 割り当てる前に、タスクと車両の状態を確かめる（画面の候補と同じ条件）
+    const [t, v, ops] = await Promise.all([
+      prisma.task.findUnique({ where: { id: tId } }),
+      prisma.vehicle.findUnique({ where: { id: vId } }),
+      loadOpsSettings(),
+    ]);
+    if (!t) return res.status(404).json({ error: 'タスクが見つかりません' });
+    if (!v) return res.status(404).json({ error: '車両が見つかりません' });
+    if (t.status !== TaskStatus.PENDING) {
+      return res.status(409).json({ error: 'このタスクは割り当て待ちではありません' });
+    }
+    if (v.status === VehicleStatus.OFFLINE) {
+      return res.status(409).json({ error: 'この車両はオフラインのため割り当てられません' });
+    }
+    if (v.status === VehicleStatus.ERROR) {
+      return res.status(409).json({ error: 'この車両は異常中のため割り当てられません' });
+    }
+    const busy = await prisma.task.count({
+      where: { assignedVehicleId: vId, status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] } },
+    });
+    if (busy > 0) {
+      return res.status(409).json({ error: 'この車両は別のタスクを実行中です' });
+    }
+    if (v.batteryLevel < ops.battMin) {
+      return res.status(409).json({ error: `電池残量が ${ops.battMin}% 未満のため割り当てられません` });
+    }
+
     const updatedTask = await dispatchService.assignTask(tId, vId);
     res.json(updatedTask);
   } catch (error) {

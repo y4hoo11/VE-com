@@ -111,10 +111,10 @@ function Key({ k }: { k: string }) {
   return <div className="flex h-11 w-11 items-center justify-center rounded-md border-2 border-slate-300 font-bold dark:border-slate-600">{k}</div>;
 }
 
-// カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL は車両の登録APIができたら保存する
+// カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL を保存する仕組みは未対応
 function Camera({ v }: { v: Vehicle }) {
   const msg = !v.camera
-    ? '📷 カメラ映像のURLが登録されていません（車両の登録APIが未対応）'
+    ? '📷 カメラ映像のURLが登録されていません（URL を保存する仕組みは未対応）'
     : !v.online
       ? '📷 映像を受信できません（車両がオフライン）'
       : null;

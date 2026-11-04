@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { ST } from '../store/data';
-import { askDeleteUser, askDeleteVehicle, emit, NOT_SUPPORTED, openModal, S, savePrefs, toast, useStore } from '../store/store';
+import { askDeleteUser, askDeleteVehicle, emit, NOT_SUPPORTED, openModal, playAlarm, saveOps, savePrefs, setTestOnline, toast, useStore } from '../store/store';
 import { Btn, Card, cx, fmtT, inputCls, Kv, Tag, VChip } from '../components/ui';
 
 const MENU: [string, string, boolean][] = [
@@ -87,11 +87,16 @@ function Display() {
           ))}
         </div>
       </Row>
-      <Row label="異常のときに音を鳴らす" hint="未対応（設定だけ保存されます）">
-        <label className="flex items-center gap-1.5 text-sm">
-          <input type="checkbox" checked={s.sound} onChange={(e) => set(() => (s.sound = e.target.checked))} />
-          鳴らす
-        </label>
+      <Row label="異常のときに音を鳴らす" hint="ERROR のログ（緊急停止など）が届いたときに鳴らします">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={s.sound} onChange={(e) => set(() => (s.sound = e.target.checked))} />
+            鳴らす
+          </label>
+          <Btn size="sm" onClick={() => playAlarm(true)}>
+            🔊 試しに鳴らす
+          </Btn>
+        </div>
       </Row>
     </Card>
   );
@@ -127,11 +132,7 @@ function Ops() {
           variant="pri"
           onClick={() => {
             if (min >= warn) return toast('「割り当てない残量」は「警告する残量」より小さくしてください', 'error');
-            S.ops.battWarn = warn;
-            S.ops.battMin = min;
-            savePrefs();
-            emit();
-            toast('運行の設定を保存しました（この端末だけ）', 'ok');
+            saveOps({ battWarn: warn, battMin: min });
           }}
         >
           保存
@@ -175,14 +176,17 @@ function Ops() {
 function Vehicles() {
   const s = useStore();
   return (
-    <Card title="車両" right={<Btn variant="pri" disabled title={NOT_SUPPORTED} onClick={() => openModal({ kind: 'vehicle' })}>＋ 車両を登録 <Tag tone="amber">未対応</Tag></Btn>}>
+    <Card title="車両" right={<Btn variant="pri" onClick={() => openModal({ kind: 'vehicle' })}>＋ 車両を登録</Btn>}>
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
           <tr>
             <th className="px-4 py-2">ID</th>
             <th className="py-2">表示名</th>
             <th className="py-2">状態</th>
-            <th className="py-2">カメラ映像のURL</th>
+            {/* 【仮】テスト用 */}
+            <th className="py-2">
+              テスト用 <Tag tone="amber">仮</Tag>
+            </th>
             <th className="py-2" />
           </tr>
         </thead>
@@ -194,12 +198,22 @@ function Vehicles() {
               <td className="py-2">
                 <VChip v={v} />
               </td>
-              <td className="py-2 font-mono text-xs text-slate-500">{v.camera || '—'}</td>
+              {/* 【仮】テスト用：実機なしでオンライン時の動きを確かめる */}
+              <td className="py-2">
+                <Btn
+                  size="sm"
+                  disabled={v.status === 'ERROR'}
+                  title={v.status === 'ERROR' ? '異常中は切り替えられません' : 'telemetry が無くてもオンライン扱いにします（サーバー再起動で元に戻ります）'}
+                  onClick={() => setTestOnline(v.id, !v.online)}
+                >
+                  {v.online ? 'オフラインにする' : 'オンラインにする'}
+                </Btn>
+              </td>
               <td className="space-x-2 py-2 pr-4 text-right">
-                <Btn size="sm" disabled title={NOT_SUPPORTED} onClick={() => openModal({ kind: 'vehicle', vehicleId: v.id })}>
+                <Btn size="sm" onClick={() => openModal({ kind: 'vehicle', vehicleId: v.id })}>
                   編集
                 </Btn>
-                <Btn size="sm" variant="dangerO" disabled title={NOT_SUPPORTED} onClick={() => askDeleteVehicle(v.id)}>
+                <Btn size="sm" variant="dangerO" onClick={() => askDeleteVehicle(v.id)}>
                   削除
                 </Btn>
               </td>

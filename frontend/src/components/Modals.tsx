@@ -415,8 +415,21 @@ function VehicleModal({ vehicleId }: { vehicleId?: string }) {
   const v = veh(vehicleId);
   const [id, setId] = useState(v?.id ?? `AGV-0${S.vehicles.length + 1}`);
   const [name, setName] = useState(v?.name ?? `${S.vehicles.length + 1}号機`);
-  const [cam, setCam] = useState(v?.camera ?? `http://pc1.local:500${S.vehicles.length + 1}/video`);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!v && !/^AGV-\d{2}$/.test(id)) return setError('車両IDは「AGV-数字2桁」の形にしてください（例: AGV-05）');
+    if (!v && veh(id)) return setError('その車両IDはすでに登録されています');
+    if (!name.trim()) return setError('名前を入力してください');
+    setBusy(true);
+    try {
+      await saveVehicle({ id, name: name.trim() }, !v);
+      closeModal();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存に失敗しました');
+      setBusy(false);
+    }
+  };
   return (
     <Frame
       title={v ? `車両の編集（${v.id}）` : '車両の登録'}
@@ -424,16 +437,7 @@ function VehicleModal({ vehicleId }: { vehicleId?: string }) {
       footer={
         <>
           <Btn onClick={closeModal}>キャンセル</Btn>
-          <Btn
-            variant="pri"
-            onClick={() => {
-              if (!v && !/^AGV-\d{2}$/.test(id)) return setError('車両IDは「AGV-数字2桁」の形にしてください（例: AGV-05）');
-              if (!v && veh(id)) return setError('その車両IDはすでに登録されています');
-              if (!name.trim()) return setError('名前を入力してください');
-              closeModal();
-              saveVehicle({ id, name: name.trim(), camera: cam }, !v);
-            }}
-          >
+          <Btn variant="pri" disabled={busy} onClick={submit}>
             {v ? '保存' : '登録'}
           </Btn>
         </>
@@ -445,9 +449,7 @@ function VehicleModal({ vehicleId }: { vehicleId?: string }) {
       <Field label="表示名">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <Field label="カメラ映像のURL" opt hint="PC1 の marker_localizer が配信する MJPEG（1台につき1つ）">
-        <input className={inputCls} value={cam} onChange={(e) => setCam(e.target.value)} />
-      </Field>
+      <div className="text-xs text-slate-500">カメラ映像のURLは、保存する仕組みがまだ無いため登録できません。</div>
     </Frame>
   );
 }

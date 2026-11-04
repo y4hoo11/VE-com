@@ -52,12 +52,19 @@ class MqttService {
         const agvId = topicParts[1];
 
         if (topic.endsWith('/telemetry')) {
+          // オフラインだった車両から telemetry が届いたら、オンラインに戻す
+          // （status を送らない送り手（ラズパイ）からでも戻れるよう、無ければ IDLE にする）
+          const prev = await prisma.vehicle.findUnique({ where: { id: agvId }, select: { status: true } });
+          const sentStatus = Object.values(VehicleStatus).includes(message.status) ? (message.status as VehicleStatus) : undefined;
+          const backOnline = prev?.status === VehicleStatus.OFFLINE && sentStatus !== VehicleStatus.OFFLINE;
+          const nextStatus = sentStatus ?? (backOnline ? VehicleStatus.IDLE : undefined);
+
           // 1. テレメトリ受信: DBのVehicle状態を更新 (upsert)
           const updatedVehicle = await prisma.vehicle.upsert({
             where: { id: agvId },
             update: {
               batteryLevel: typeof message.battery === 'number' ? message.battery : undefined,
-              status: message.status ? (message.status as VehicleStatus) : undefined,
+              status: nextStatus,
               currentX: typeof message.x === 'number' ? message.x : undefined,
               currentY: typeof message.y === 'number' ? message.y : undefined,
               currentTheta: typeof message.theta === 'number' ? message.theta : undefined,
@@ -87,6 +94,10 @@ class MqttService {
             currentTheta: updatedVehicle.currentTheta,
             telemetry: pickTelemetryExtra(message),
           });
+
+          if (backOnline) {
+            await socketService.recordLog(agvId, LogLevel.INFO, '通信が戻ったため、オンラインに戻しました');
+          }
 
         } else if (topic.endsWith('/emergency')) {
           const reason = message.reason || '障害物接近による緊急制動';
@@ -147,4 +158,4 @@ class MqttService {
   }
 }
 
-export const mqttService = new MqttService();
+export const mqttService = new MqttService();
