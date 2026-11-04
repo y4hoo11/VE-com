@@ -2,7 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { ST } from '../store/data';
-import { askDeleteUser, askDeleteVehicle, emit, NOT_SUPPORTED, openModal, playAlarm, saveOps, savePrefs, setTestOnline, toast, useStore } from '../store/store';
+import { askDeleteUser, askDeleteVehicle, emit, NOT_SUPPORTED, openModal, playAlarm, restartDemo, saveOps, savePrefs, setDemoMode, setTestOnline, toast, useStore } from '../store/store';
 import { Btn, Card, cx, fmtT, inputCls, Kv, Tag, VChip } from '../components/ui';
 
 const MENU: [string, string, boolean][] = [
@@ -12,6 +12,7 @@ const MENU: [string, string, boolean][] = [
   ['vehicles', '車両', true],
   ['users', 'ユーザー', true],
   ['system', 'システム情報', false],
+  ['demo', 'デモ（期間限定）', false], // 【仮】デモモード
 ];
 
 export function Settings() {
@@ -39,7 +40,7 @@ export function Settings() {
             🔒 この設定は管理者（ADMIN）だけが見られます。
           </Card>
         ) : (
-          { display: <Display />, account: <Account />, ops: <Ops />, vehicles: <Vehicles />, users: <Users />, system: <System /> }[item[0]]
+          { display: <Display />, account: <Account />, ops: <Ops />, vehicles: <Vehicles />, users: <Users />, system: <System />, demo: <Demo /> }[item[0]]
         )}
       </div>
     </div>
@@ -97,6 +98,44 @@ function Display() {
             🔊 試しに鳴らす
           </Btn>
         </div>
+      </Row>
+    </Card>
+  );
+}
+
+// 【仮】デモモードの切り替え。実機で確認できるようになったら消す（services/demo.ts と一緒に）
+function Demo() {
+  const s = useStore();
+  return (
+    <Card title={<>デモ <Tag tone="amber">期間限定</Tag> <span className="text-xs font-normal text-slate-500">この端末のブラウザに保存されます</span></>} bodyClass="px-5">
+      <Row label="デモデータを使う" hint="実機がなくても、車両の動きや操作を試せます。サーバー・DB・実機には何も送りません">
+        <label className="flex items-center gap-1.5 text-sm">
+          <input type="checkbox" checked={s.demo} onChange={(e) => setDemoMode(e.target.checked)} />
+          デモモードにする
+        </label>
+      </Row>
+      {s.demo && (
+        <Row label="デモをやり直す" hint="車両・タスク・ログを最初の状態に戻します">
+          <Btn size="sm" onClick={restartDemo}>
+            最初に戻す
+          </Btn>
+        </Row>
+      )}
+      <Row label="試せること">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+          <li>地図の車両の移動と、進行方向を示す矢印の向き</li>
+          <li>🏠 ホームへ戻る、📍 地点へ移動、🎯 現在地を設定（車両をクリックして詳細から）</li>
+          <li>⏸ 一時停止・再開、✓ 積み降ろし完了</li>
+          <li>タスクの作成・割り当て・進捗・完了・中止（電池不足やオフラインの車両は断られます）</li>
+          <li>緊急停止と解除、異常の音、記録の絞り込み</li>
+        </ul>
+      </Row>
+      <Row label="知っておくこと">
+        <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+          <li>データはメモリにあるだけで、再読み込みすると最初に戻ります</li>
+          <li>ほかの端末やタブとは共有されません</li>
+          <li>走る速さや作業時間は、見やすいように実機とは変えています</li>
+        </ul>
       </Row>
     </Card>
   );

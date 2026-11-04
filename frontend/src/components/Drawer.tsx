@@ -80,7 +80,8 @@ export function DrawerHost() {
 // 車両（ドロワーと車両詳細ページで共通）
 // ---------------------------------------------------------------
 export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }) {
-  useStore();
+  const { demo } = useStore(); // 【仮】デモ中は、まだ実機向けの命令が無いボタンも押せる
+  const naTitle = demo ? undefined : NOT_SUPPORTED;
   const t = task(v.taskId);
   const vbat = v.vbat == null ? '' : `（${v.vbat.toFixed(2)} V）`;
   const off = !v.online;
@@ -106,8 +107,8 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             </Btn>
           )}
           {v.err.code === 'LOCALIZATION_LOST' && (
-            <Btn size="sm" op className="mt-2" disabled title={NOT_SUPPORTED} onClick={() => startMapMode('pose', v.id)}>
-              🎯 現在地を設定する <Na />
+            <Btn size="sm" op className="mt-2" disabled={!demo} title={naTitle} onClick={() => startMapMode('pose', v.id)}>
+              🎯 現在地を設定する {!demo && <Na />}
             </Btn>
           )}
         </div>
@@ -144,16 +145,16 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             </div>
             <div className="flex flex-wrap gap-2">
               {v.paused ? (
-                <Btn size="sm" variant="pri" op disabled title={NOT_SUPPORTED} onClick={() => resume(v.id)}>
-                  ▶ 再開 <Na />
+                <Btn size="sm" variant="pri" op disabled={!demo} title={naTitle} onClick={() => resume(v.id)}>
+                  ▶ 再開 {!demo && <Na />}
                 </Btn>
               ) : (
-                <Btn size="sm" op disabled title={NOT_SUPPORTED} onClick={() => pause(v.id)}>
-                  ⏸ 一時停止 <Na />
+                <Btn size="sm" op disabled={!demo} title={naTitle} onClick={() => pause(v.id)}>
+                  ⏸ 一時停止 {!demo && <Na />}
                 </Btn>
               )}
-              <Btn size="sm" op disabled title={NOT_SUPPORTED} onClick={() => confirmLoad(v.id)}>
-                ✓ 積み降ろし完了 <Na />
+              <Btn size="sm" op disabled={!demo} title={naTitle} onClick={() => confirmLoad(v.id)}>
+                ✓ 積み降ろし完了 {!demo && <Na />}
               </Btn>
               <Btn size="sm" variant="dangerO" op onClick={() => askCancel(t.id)}>
                 中止…
@@ -168,17 +169,19 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
       {S.user.role !== 'VIEWER' && (
         <Section title="移動の指示">
           <div className="flex flex-wrap gap-2">
-            <Btn size="sm" disabled title={NOT_SUPPORTED} onClick={() => startMapMode('goto', v.id)}>
-              📍 地点へ移動 <Na />
+            <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => startMapMode('goto', v.id)}>
+              📍 地点へ移動 {!demo && <Na />}
             </Btn>
-            <Btn size="sm" disabled title={NOT_SUPPORTED} onClick={() => askHome(v.id)}>
-              🏠 ホームへ戻る <Na />
+            <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => askHome(v.id)}>
+              🏠 ホームへ戻る {!demo && <Na />}
             </Btn>
-            <Btn size="sm" disabled title={NOT_SUPPORTED} onClick={() => startMapMode('pose', v.id)}>
-              🎯 現在地を設定 <Na />
+            <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => startMapMode('pose', v.id)}>
+              🎯 現在地を設定 {!demo && <Na />}
             </Btn>
           </div>
-          <div className="mt-1.5 text-xs text-slate-400">移動の指示は、バックエンドに車両への命令API（GOTO・RETURN_HOME・SET_POSE）を追加してから使えるようになります</div>
+          <div className="mt-1.5 text-xs text-slate-400">
+            {demo ? 'デモモードなので、実機には送られません' : '移動の指示は、バックエンドに車両への命令API（GOTO・RETURN_HOME・SET_POSE）を追加してから使えるようになります'}
+          </div>
         </Section>
       )}
 

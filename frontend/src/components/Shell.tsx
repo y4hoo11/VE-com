@@ -57,7 +57,7 @@ export function Header() {
       <div className="flex-1" />
       <button type="button" data-pop-trigger className={hdBtn} onClick={pop('conn')}>
         <span className={cx('h-2 w-2 rounded-full', s.server && s.mqtt ? 'bg-green-400' : 'animate-pulse bg-red-500')} />
-        {!s.server ? 'サーバー切断' : s.mqtt ? '接続中' : 'MQTT切断'}
+        {s.demo ? 'デモ' : !s.server ? 'サーバー切断' : s.mqtt ? '接続中' : 'MQTT切断'}
       </button>
       <button type="button" data-pop-trigger className={cx(hdBtn, 'relative')} onClick={pop('bell')} aria-label="通知">
         🔔
@@ -85,9 +85,19 @@ export function Header() {
 export function AlertBanner() {
   const s = useStore();
   const errs = s.vehicles.filter((v) => v.status === 'ERROR' && v.err);
-  if (s.server && s.mqtt && !errs.length) return null;
+  if (s.server && s.mqtt && !errs.length && !s.demo) return null;
   return (
     <div className="relative z-[300] shrink-0">
+      {/* 【仮】デモモードの表示。実データと見間違えないよう、どの画面でも出す */}
+      {s.demo && (
+        <div className="flex items-center gap-3 border-b border-violet-300 bg-violet-100 px-4 py-2 text-sm text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200">
+          🧪 <b>デモモード</b>
+          <span>表示は実データではありません。操作はサーバー・実機に送られません。</span>
+          <a href="#/settings/demo" className="ml-auto underline">
+            設定で切り替え
+          </a>
+        </div>
+      )}
       {!s.server && (
         <div className="flex items-center gap-3 border-b border-red-300 bg-red-50 px-4 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
           ⚠ <b>サーバーとの接続が切れています</b>

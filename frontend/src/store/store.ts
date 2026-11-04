@@ -6,8 +6,10 @@ import { useSyncExternalStore } from 'react';
 import { isAxiosError } from 'axios';
 import { api } from '../services/api';
 import { emitWithAck, socket } from '../services/socket';
+import { demoCommand, demoOn, resetDemo, setDemoEnabled } from '../services/demo'; // 【仮】デモモード
 import {
   ERR,
+  isFree,
   LATCHED,
   wpByName,
   WAYPOINTS,
@@ -116,6 +118,8 @@ interface VehicleUpdate {
     phase?: string;
     goal?: string;
   };
+  // 【仮】デモモードのときだけ届く（実機の telemetry には無い項目）
+  demo?: { paused: boolean; route: Pt[]; routeTotal: number; mode: Vehicle['mode']; wait: number; progress: number | null };
 }
 
 // ---------------------------------------------------------------
@@ -123,7 +127,7 @@ interface VehicleUpdate {
 // ---------------------------------------------------------------
 // 端末ごとに覚えておく表示の設定（ブラウザに保存）
 const PREF_KEY = 'vecom_prefs';
-type Prefs = { theme: 'light' | 'dark'; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean };
+type Prefs = { theme: 'light' | 'dark'; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; demo?: boolean };
 export type OpsSettings = { battWarn: number; battMin: number };
 const loadPrefs = (): Partial<Prefs> => {
   try {
@@ -134,10 +138,18 @@ const loadPrefs = (): Partial<Prefs> => {
 };
 const prefs = loadPrefs();
 
+// 【仮】デモモード（前回オンにしたままなら、そのまま始める）
+const demoAtStart = prefs.demo === true;
+if (demoAtStart) setDemoEnabled(true);
+
+// 実サーバーとの接続状態。デモ中は画面に出さないが、デモをやめたときに戻すために覚えておく
+const real = { server: false, mqtt: true };
+
 export const S = {
   user: { name: '', role: 'VIEWER' as Role },
+  demo: demoAtStart,
   mqtt: true, // サーバー⇔MQTT（system:status で更新）
-  server: false, // ブラウザ⇔サーバー（Socket.IO の接続）
+  server: demoAtStart, // ブラウザ⇔サーバー（Socket.IO の接続）
   loaded: false,
   vehicles: [] as Vehicle[],
   tasks: [] as Task[],
@@ -177,7 +189,7 @@ export function useStore() {
 // 表示の設定をブラウザに保存する
 export function savePrefs() {
   try {
-    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound };
+    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound, demo: S.demo };
     localStorage.setItem(PREF_KEY, JSON.stringify(p));
   } catch {
     /* 保存できない環境では何もしない */
@@ -393,27 +405,45 @@ async function reloadTasks() {
 // Socket.IO の受信（接続は AuthContext がログイン中だけ行う）
 // ---------------------------------------------------------------
 let listening = false;
+let inSession = false; // ログイン中か（デモのイベントをログアウト中に受けないように）
+
+// 【仮】実サーバーのイベントはデモ中は無視し、デモのイベントは同じ処理で受ける
+function on<T>(event: string, fn: (payload: T) => void) {
+  socket.on(event, (payload: T) => {
+    if (!S.demo) fn(payload);
+  });
+  demoOn<T>(event, (payload) => {
+    if (inSession) fn(payload);
+  });
+}
+
 function listen() {
   if (listening) return;
   listening = true;
 
   socket.on('connect', () => {
+    real.server = true;
+    if (S.demo) return;
     S.server = true;
     reloadAll(); // 切断中の変化を取りこぼさないよう、つながるたびに取り直す
   });
   socket.on('disconnect', () => {
+    real.server = false;
+    if (S.demo) return;
     S.server = false;
     emit();
   });
 
   socket.on('system:status', (st: { mqtt?: boolean }) => {
-    if (typeof st?.mqtt === 'boolean' && st.mqtt !== S.mqtt) {
+    if (typeof st?.mqtt !== 'boolean') return;
+    real.mqtt = st.mqtt;
+    if (!S.demo && st.mqtt !== S.mqtt) {
       S.mqtt = st.mqtt;
       emit();
     }
   });
 
-  socket.on('vehicle:update', (u: VehicleUpdate) => {
+  on('vehicle:update', (u: VehicleUpdate) => {
     const v = veh(u.id);
     if (!v) {
       loadVehicles().then(() => {
@@ -449,11 +479,21 @@ function listen() {
       }
       v.online = v.status !== 'OFFLINE';
     }
+    // 【仮】デモの経路・一時停止・進捗
+    if (u.demo) {
+      v.paused = u.demo.paused;
+      v.route = u.demo.route;
+      v.routeTotal = u.demo.routeTotal;
+      v.mode = u.demo.mode;
+      v.wait = u.demo.wait;
+      const t = task(v.taskId);
+      if (t && u.demo.progress != null) t.progress = u.demo.progress;
+    }
     v.lastHb = now();
     emit();
   });
 
-  socket.on('log:new', (a: ApiLog) => {
+  on('log:new', (a: ApiLog) => {
     const l = toLog(a);
     if (S.logs.some((x) => x.id === l.id)) return;
     S.logs.unshift(l);
@@ -468,12 +508,12 @@ function listen() {
     emit();
   });
 
-  socket.on('tasks:changed', () => {
+  on('tasks:changed', () => {
     reloadTasks();
   });
 
   // 車両の登録・削除
-  socket.on('vehicles:changed', () => {
+  on('vehicles:changed', () => {
     loadVehicles()
       .then(() => {
         relink();
@@ -484,10 +524,45 @@ function listen() {
   });
 
   // 運行の設定の変更（ほかの端末で保存されたとき）
-  socket.on('settings:changed', (st: { ops?: OpsSettings }) => {
+  on('settings:changed', (st: { ops?: OpsSettings }) => {
     applyOps(st?.ops);
     emit();
   });
+}
+
+// ---------------------------------------------------------------
+// 【仮】デモモードの切り替え（設定 → デモ）。この端末のブラウザだけで動き、サーバーには何も送らない
+// ---------------------------------------------------------------
+function clearData() {
+  Object.assign(S, { vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
+  pagedLogs.clear();
+}
+
+export function setDemoMode(on: boolean) {
+  S.demo = on;
+  setDemoEnabled(on);
+  savePrefs();
+  clearData();
+  S.server = on || real.server;
+  S.mqtt = on || real.mqtt;
+  emit();
+  reloadAll();
+  toast(on ? 'デモモードにしました（サーバー・実機には何も送りません）' : 'デモモードを終了し、実データに戻しました', on ? 'warn' : 'ok');
+}
+
+export function restartDemo() {
+  if (!S.demo) return;
+  resetDemo();
+  clearData();
+  emit();
+  reloadAll();
+  toast('デモを最初に戻しました', 'ok');
+}
+
+// デモの命令の結果を画面に伝える（問題があれば理由を出す）
+function demoResult(error: string | null, okMsg?: string) {
+  if (error) toast(error, 'warn');
+  else if (okMsg) toast(okMsg, 'ok');
 }
 
 // ---------------------------------------------------------------
@@ -500,12 +575,15 @@ export function startSession(user: { username: string; role: string }, logout: (
   const role = (['ADMIN', 'OPERATOR', 'VIEWER'].includes(user.role) ? user.role : 'VIEWER') as Role;
   S.user = { name: user.username, role };
   S.users = [{ id: 'me', name: user.username, email: '—', role, created: '—' }];
+  inSession = true;
   listen();
-  if (socket.connected) S.server = true;
+  real.server = socket.connected;
+  if (real.server) S.server = true;
   reloadAll();
 }
 
 export function endSession() {
+  inSession = false;
   Object.assign(S, { loaded: false, vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
   emit();
 }
@@ -605,13 +683,33 @@ export async function clearEmergency(id: string) {
 }
 
 // ---------------------------------------------------------------
-// 運行操作（バックエンドに命令APIが無いので未対応）
+// 運行操作（バックエンドに命令APIが無いので未対応。【仮】デモ中だけ動く）
 // ---------------------------------------------------------------
-export const pause = (_id: string) => notSupported();
-export const resume = (_id: string) => notSupported();
-export const confirmLoad = (_id: string) => notSupported();
-export const askHome = (_id: string) => notSupported();
-export const startMapMode = (_type: 'goto' | 'pose', _vid: string) => notSupported();
+export function pause(id: string) {
+  if (!S.demo) return notSupported();
+  demoResult(demoCommand.pause(id));
+}
+export function resume(id: string) {
+  if (!S.demo) return notSupported();
+  demoResult(demoCommand.resume(id));
+}
+export function confirmLoad(id: string) {
+  if (!S.demo) return notSupported();
+  demoResult(demoCommand.confirmLoad(id));
+}
+export function askHome(id: string) {
+  if (!S.demo) return notSupported();
+  const home = wpByName('Home')!;
+  demoResult(demoCommand.goto(id, home, home.name), `${veh(id)?.name ?? id} をホームへ戻します`);
+}
+export function startMapMode(type: 'goto' | 'pose', vid: string) {
+  if (!S.demo) return notSupported();
+  S.mapMode = { type, vid };
+  S.drawer = null;
+  // 地図のない画面や、車両の詳細以外から押されたら、運行モニターの地図で指定する
+  if (!window.location.hash.startsWith('#/vehicles/')) nav('/');
+  emit();
+}
 
 export function cancelMapMode() {
   S.mapMode = null;
@@ -634,13 +732,31 @@ export function nearestWp(p: Pt, within = 0.7) {
   });
   return best;
 }
-export function askGoto(_vid: string, _target: { name?: string; label?: string; x: number; y: number }) {
+export function askGoto(vid: string, target: { name?: string; label?: string; x: number; y: number }) {
   S.mapMode = null;
-  notSupported();
+  if (!S.demo) return notSupported();
+  const goal = target.name ?? `(${target.x.toFixed(1)}, ${target.y.toFixed(1)})`;
+  demoResult(demoCommand.goto(vid, { x: target.x, y: target.y }, goal), `${veh(vid)?.name ?? vid} を ${goal} へ移動します`);
+  emit();
 }
-export function mapModeClick(_p: Pt) {
+export function mapModeClick(p: Pt) {
+  const mm = S.mapMode;
+  if (!S.demo || !mm) {
+    S.mapMode = null;
+    return notSupported();
+  }
+  if (mm.type === 'goto') return askGoto(mm.vid, nearestWp(p) ?? p);
+  // 現在地の設定：1回目で場所、2回目で向き
+  if (!mm.p) {
+    if (!isFree(p)) return toast('そこには置けません（棚・壁・事務所の近く）', 'warn');
+    mm.p = p;
+    emit();
+    return;
+  }
+  const theta = Math.atan2(p.y - mm.p.y, p.x - mm.p.x);
   S.mapMode = null;
-  notSupported();
+  demoResult(demoCommand.setPose(mm.vid, mm.p, theta), '現在地を設定しました');
+  emit();
 }
 
 // ---------------------------------------------------------------
