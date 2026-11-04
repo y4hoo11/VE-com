@@ -124,6 +124,16 @@ function Ops() {
   const s = useStore();
   const [warn, setWarn] = useState(s.ops.battWarn);
   const [min, setMin] = useState(s.ops.battMin);
+
+  // ほかの端末で保存されたら、入力欄も新しい値に合わせる（古い値で上書きしないように）
+  const savedKey = `${s.ops.battWarn}/${s.ops.battMin}`;
+  const [prevSavedKey, setPrevSavedKey] = useState(savedKey);
+  if (savedKey !== prevSavedKey) {
+    setPrevSavedKey(savedKey);
+    setWarn(s.ops.battWarn);
+    setMin(s.ops.battMin);
+  }
+
   return (
     <Card
       title="運行"

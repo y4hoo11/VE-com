@@ -45,9 +45,9 @@ export function Logs() {
   const [q, setQ] = useState('');
   const [qDebounced, setQDebounced] = useState('');
   const [page, setPage] = useState(0);
-  const [list, setList] = useState<Log[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [fetchedList, setFetchedList] = useState<Log[]>([]);
+  const [fetchedTotal, setFetchedTotal] = useState(0);
+  const [doneKey, setDoneKey] = useState(''); // 取得が終わった条件（今の条件と違えば読み込み中）
   const [exporting, setExporting] = useState(false);
   const reqSeq = useRef(0);
 
@@ -61,30 +61,34 @@ export function Logs() {
   const key = JSON.stringify(filter);
 
   // 条件が変わったら1ページ目に戻す
-  useEffect(() => {
+  const [prevKey, setPrevKey] = useState(key);
+  if (key !== prevKey) {
+    setPrevKey(key);
     setPage(0);
-  }, [key]);
+  }
 
   // 新しいログが届いたら、1ページ目を見ているときだけ取り直す
   const newest = s.logs[0]?.id ?? 0;
   const refreshKey = page === 0 ? newest : 0;
+  const requestKey = `${key}|${page}|${refreshKey}`;
+
+  // どのレベルも選ばれていなければ、取得せず空で表示する
+  const noLevel = !Object.values(lv).some(Boolean);
+  const list = noLevel ? [] : fetchedList;
+  const total = noLevel ? 0 : fetchedTotal;
+  const loading = !noLevel && doneKey !== requestKey;
 
   useEffect(() => {
+    const seq = ++reqSeq.current; // 先に進めて、取得中の古い結果を捨てる
     const params = toParams(filter);
-    if (!params) {
-      setList([]);
-      setTotal(0);
-      return;
-    }
-    const seq = ++reqSeq.current;
-    setLoading(true);
+    if (!params) return;
     const t = setTimeout(() => {
       fetchLogs(params, page * PAGE_SIZE, PAGE_SIZE)
         .then((r) => {
           if (seq !== reqSeq.current) return; // 古い条件の結果は捨てる
           keepLogs(r.list);
-          setList(r.list);
-          setTotal(r.total);
+          setFetchedList(r.list);
+          setFetchedTotal(r.total);
         })
         .catch((e) => {
           if (seq !== reqSeq.current) return;
@@ -92,7 +96,7 @@ export function Logs() {
           toast('ログの取得に失敗しました', 'error');
         })
         .finally(() => {
-          if (seq === reqSeq.current) setLoading(false);
+          if (seq === reqSeq.current) setDoneKey(requestKey);
         });
     }, 150);
     return () => clearTimeout(t);

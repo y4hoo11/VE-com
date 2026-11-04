@@ -664,7 +664,7 @@ export async function createTask(d: TaskInput): Promise<Task> {
     emit();
     return t;
   } catch (e) {
-    throw new Error(errMsg(e, 'タスクの作成に失敗しました'));
+    throw new Error(errMsg(e, 'タスクの作成に失敗しました'), { cause: e });
   }
 }
 
@@ -754,7 +754,7 @@ export async function saveVehicle(d: { id: string; name: string }, isNew: boolea
     if (isNew) await api.post('/vehicles', d);
     else await api.patch(`/vehicles/${encodeURIComponent(d.id)}`, { name: d.name });
   } catch (e) {
-    throw new Error(errMsg(e, isNew ? '車両の登録に失敗しました' : '車両の保存に失敗しました'));
+    throw new Error(errMsg(e, isNew ? '車両の登録に失敗しました' : '車両の保存に失敗しました'), { cause: e });
   }
   // 一覧の更新は vehicles:changed / vehicle:update で届くが、届く前に画面を合わせておく
   const v = veh(d.id);
