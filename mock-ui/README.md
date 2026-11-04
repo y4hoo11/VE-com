@@ -4,14 +4,61 @@
 車両の動き・タスクの進捗・異常は `src/mock/store.ts` の中で疑似的に作っています。
 PC の画面（横 1280px 以上）だけを想定しています。
 
+> このモックは `mock/ui` ブランチだけにある参照用です。main にはマージしません。
+> バックエンド・Docker・MQTT・`.env` は**どれも不要**です。
+
+## 動かし方
+
+### 0. 必要なもの
+
+- **Node.js 22 以上**（20.19 以上でも動きます）。入っていなければ <https://nodejs.org/> から LTS 版を入れてください。
+  確認方法: ターミナルで `node -v`
+- Git
+
+### 1. ブランチを取ってくる
+
+まだリポジトリを clone していない人:
+
 ```bash
-cd mock-ui
-npm install
-npm run dev      # http://localhost:5180
+git clone -b mock/ui https://github.com/y4hoo11/VE-com.git VE-con-mock
+cd VE-con-mock/mock-ui
 ```
 
-ログインは何を入力しても通ります。左下の「🧪 モック操作」から、障害物での停止・自己位置の喪失・
-通信断・MQTT 切断を起こせます。右上の 👤 から権限（ADMIN / OPERATOR / VIEWER）を切り替えられます。
+すでに clone している人:
+
+```bash
+git fetch origin
+git switch mock/ui        # 自分の作業中の変更は先に commit か stash しておく
+cd mock-ui
+```
+
+### 2. 起動する
+
+| 環境 | やり方 |
+|---|---|
+| Windows | エクスプローラーで `mock-ui` フォルダを開き、**`start.bat` をダブルクリック** |
+| Mac / Linux / WSL | `./start.sh` |
+| どこでも（手動） | `npm install` → `npm start` |
+
+初回だけ `npm install` が走るので 1〜2 分かかります。終わるとブラウザで <http://localhost:5180> が自動で開きます。
+終了するときは、起動した黒い画面で `Ctrl + C`（または画面を閉じる）。
+
+### 3. 触ってみる
+
+- ログインは**何を入力しても通ります**
+- 左下の「🧪 モック操作」から、障害物での停止・自己位置の喪失・通信断・MQTT 切断を起こせます
+- 右上の 👤 から権限（ADMIN / OPERATOR / VIEWER）を切り替えられます
+- 状態はブラウザを再読み込みすると最初に戻ります
+
+### うまく動かないとき
+
+| 症状 | 対処 |
+|---|---|
+| `node` が見つからない / `'node' は認識されていません` | Node.js を入れて、ターミナル（またはPC）を開き直す |
+| `Port 5180 is in use` | すでに別の画面で起動中。そちらを閉じるか、そのまま <http://localhost:5180> を開く |
+| `npm install` で `EBADENGINE` などの警告・エラー | Node.js が古い。`node -v` で 22 以上か確認 |
+| 画面が真っ白 / 崩れる | `node_modules` フォルダを消して、もう一度起動（入れ直しになる） |
+| ブランチを切り替えたら `mock-ui` フォルダが無い | `git switch mock/ui` できているか `git branch` で確認 |
 
 ## 画面の構成
 

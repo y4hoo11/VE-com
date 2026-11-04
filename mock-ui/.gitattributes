@@ -1,0 +1,2 @@
+# start.bat は CRLF でないと cmd.exe で誤動作することがあるため固定
+*.bat text eol=crlf
