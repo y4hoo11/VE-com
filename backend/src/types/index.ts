@@ -45,6 +45,32 @@ export interface VehicleUpdatePayload {
   currentTheta?: number | null;
   currentMapId?: string | null;
   emergencyReason?: string | null;
+  // 異常の種類（docs/agv_protocol.md 2-3 の code と source）。画面で「解除が必要か」を分けるのに使う
+  emergencyCode?: string | null;
+  emergencySource?: string | null;
+  // ROS から届いた telemetry のうち、DB に保存しない項目（速度・自己位置の確かさ・温度など）
+  // 届いたものだけ入る。画面はこれをそのまま表示する
+  telemetry?: VehicleTelemetryExtra;
+}
+
+// telemetry の追加項目（docs/agv_protocol.md 2-2）
+export interface VehicleTelemetryExtra {
+  speed?: number;
+  locQuality?: number;
+  piTemp?: number;
+  esp32?: boolean;
+  lidarHz?: number;
+  vbat?: number;
+  phase?: string;
+  goal?: string;
+  taskId?: string;
+  mode?: string;
+  note?: string;
+}
+
+// サーバーの接続状態（画面のヘッダー・お知らせ帯に出す）
+export interface SystemStatusPayload {
+  mqtt: boolean;
 }
 
 // ログ出力用ペイロード型定義

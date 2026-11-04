@@ -24,7 +24,7 @@ app.get('/', (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`;
-    res.json({ status: 'ok', database: 'connected' });
+    res.json({ status: 'ok', database: 'connected', mqtt: mqttService.isConnected() ? 'connected' : 'disconnected' });
   } catch (error) {
     res.status(500).json({ status: 'error', database: 'disconnected', error });
   }
@@ -45,4 +45,4 @@ httpServer.listen(PORT, () => {
   console.log(` URL: http://localhost:${PORT}`);
   console.log(` API: http://localhost:${PORT}/api`);
   console.log(`=================================`);
-});
+});

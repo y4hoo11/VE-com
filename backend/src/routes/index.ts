@@ -1,7 +1,7 @@
 // routes/index.ts
 import { Router } from 'express';
 import { getVehicles, getVehicleById } from '../controllers/agvController';
-import { getTasks, createTask, assignTask, deleteTask, updateTask } from '../controllers/taskController'; // deleteTaskを追加
+import { getTasks, getTaskById, createTask, assignTask, deleteTask, updateTask } from '../controllers/taskController';
 import { getLogs } from '../controllers/logController';
 import { login, getMe } from '../controllers/authController';
 import { requireAuth } from '../middleware/auth';
@@ -24,7 +24,8 @@ router.get('/vehicles/:id', getVehicleById);
 router.get('/tasks', getTasks);
 router.post('/tasks', createTask);
 router.post('/tasks/assign', assignTask);
-router.delete('/tasks/:id', deleteTask); // 👈 削除APIを追加
+router.get('/tasks/:id', getTaskById);
+router.delete('/tasks/:id', deleteTask); // 未割当・割当済は取り消し、実行中は中止（CANCEL_TASK）
 router.patch('/tasks/:id', updateTask);
 
 // ログAPI

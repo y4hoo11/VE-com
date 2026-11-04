@@ -3,7 +3,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../config/database';
 import { dispatchService } from '../services/dispatchService';
 import { socketService } from '../services/socketService';
-import { TaskStatus, VehicleStatus } from '@prisma/client';
+import { mqttService } from '../services/mqttService';
+import { TaskStatus, VehicleStatus, LogLevel } from '@prisma/client';
  
 // ヘルパー関数: string | string[] から安全に単一の string を取り出す
 const getStringParam = (param: unknown): string | undefined => {
@@ -131,22 +132,29 @@ export const deleteTask = async (req: Request, res: Response) => {
   try {
     const taskId = getStringParam(req.params.id);
     const userId = req.user?.id || getStringParam(req.body?.userId) || getStringParam(req.query?.userId);
- 
+    const actorName = req.user?.username || userId || '不明';
+
     if (!taskId) {
       return res.status(400).json({ error: 'タスクIDは必須です' });
     }
- 
+
     const outcome = await prisma.$transaction(async (tx) => {
       const task = await tx.task.findUnique({ where: { id: taskId } });
- 
-      if (!task) return 'not_found' as const;
-      // 実行中のタスクは車両への停止指示が必要なため、ここでは削除させない
-      if (task.status === TaskStatus.IN_PROGRESS) return 'in_progress' as const;
+
+      if (!task) return { kind: 'not_found' as const };
       // 二重実行で completedAt の上書きや履歴の重複が起きないようにする
-      if (task.status === TaskStatus.CANCELLED || task.status === TaskStatus.COMPLETED) {
-        return 'already_done' as const;
+      if (
+        task.status === TaskStatus.CANCELLED ||
+        task.status === TaskStatus.COMPLETED ||
+        task.status === TaskStatus.FAILED
+      ) {
+        return { kind: 'already_done' as const };
       }
- 
+
+      // 配車済み・実行中なら「中止」。車両に CANCEL_TASK を送る（docs/agv_protocol.md 2-1）
+      const running = task.status === TaskStatus.ASSIGNED || task.status === TaskStatus.IN_PROGRESS;
+      const vehicleId = running ? task.assignedVehicleId : null;
+
       await tx.task.update({
         where: { id: taskId },
         data: {
@@ -154,34 +162,96 @@ export const deleteTask = async (req: Request, res: Response) => {
           completedAt: new Date(), // キャンセル日時
         },
       });
- 
+
       await tx.taskHistory.create({
         data: {
           taskId: task.id,
           status: TaskStatus.CANCELLED,
-          note: `タスク「${task.title}」がキャンセルされました (実行ユーザーID: ${userId || '不明'})`,
+          note: running
+            ? `タスク「${task.title}」を中止しました（CANCEL_TASK, 操作: ${actorName}）`
+            : `タスク「${task.title}」がキャンセルされました（操作: ${actorName}）`,
         },
       });
- 
-      return 'ok' as const;
+
+      // 車両に他の進行中タスクがなく、異常でもなければ待機に戻す
+      let releasedVehicle = false;
+      if (vehicleId) {
+        const remaining = await tx.task.count({
+          where: {
+            assignedVehicleId: vehicleId,
+            id: { not: task.id },
+            status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] },
+          },
+        });
+        const vehicle = await tx.vehicle.findUnique({ where: { id: vehicleId } });
+        if (remaining === 0 && vehicle && vehicle.status !== VehicleStatus.ERROR && vehicle.status !== VehicleStatus.OFFLINE) {
+          await tx.vehicle.update({ where: { id: vehicleId }, data: { status: VehicleStatus.IDLE } });
+          releasedVehicle = true;
+        }
+      }
+
+      return { kind: 'ok' as const, task, vehicleId, releasedVehicle };
     });
- 
-    if (outcome === 'not_found') {
+
+    if (outcome.kind === 'not_found') {
       return res.status(404).json({ error: 'タスクが見つかりません' });
     }
-    if (outcome === 'in_progress') {
-      return res.status(409).json({ error: '実行中のタスクは削除できません' });
+    if (outcome.kind === 'already_done') {
+      return res.status(409).json({ error: '既に完了・失敗・キャンセル済みのタスクです' });
     }
-    if (outcome === 'already_done') {
-      return res.status(409).json({ error: '既に完了またはキャンセル済みのタスクです' });
+
+    let warning: string | undefined;
+    if (outcome.vehicleId) {
+      mqttService.sendVehicleCommand(outcome.vehicleId, { action: 'CANCEL_TASK', taskId: outcome.task.id });
+      await socketService.recordLog(
+        outcome.vehicleId,
+        LogLevel.WARN,
+        `タスク [${outcome.task.title}] を中止しました（CANCEL_TASK, 操作: ${actorName}）`,
+      );
+      if (outcome.releasedVehicle) {
+        socketService.broadcastVehicleUpdate({ id: outcome.vehicleId, status: VehicleStatus.IDLE });
+      }
+      if (!mqttService.isConnected()) {
+        warning = 'MQTTブローカーに接続されていないため、中止の命令がまだ車両に届いていません';
+      }
     }
- 
+
     socketService.broadcastTasksChanged();
-    res.status(200).json({ message: 'タスクをキャンセル（削除）しました' });
+    res.status(200).json({
+      message: outcome.vehicleId ? 'タスクを中止しました' : 'タスクをキャンセル（削除）しました',
+      ...(warning ? { warning } : {}),
+    });
   } catch (error) {
     console.error('タスク削除エラー:', error);
     // 内部エラーの詳細はクライアントに返さない
     res.status(500).json({ error: 'タスクの削除に失敗しました' });
+  }
+};
+
+/**
+ * GET /api/tasks/:id
+ * タスク1件と、その状態の変化の履歴（古い順）を返す
+ */
+export const getTaskById = async (req: Request, res: Response) => {
+  try {
+    const taskId = getStringParam(req.params.id);
+    if (!taskId) return res.status(400).json({ error: 'タスクIDは必須です' });
+
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      include: {
+        assignedVehicle: true,
+        createdByUser: { select: { id: true, username: true, email: true } },
+        histories: { orderBy: { timestamp: 'asc' } },
+      },
+    });
+    if (!task) return res.status(404).json({ error: 'タスクが見つかりません' });
+
+    // 履歴の id は BigInt なので文字列にする
+    res.json({ ...task, histories: task.histories.map((h) => ({ ...h, id: h.id.toString() })) });
+  } catch (error) {
+    console.error('タスク取得エラー:', error);
+    res.status(500).json({ error: 'タスクの取得に失敗しました' });
   }
 };
  
