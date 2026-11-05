@@ -3,6 +3,7 @@
 import { io, Socket } from 'socket.io-client';
 import { AUTH_CONFIG } from '../config/Auth';
 import { API_ORIGIN, AUTH_EXPIRED_EVENT } from './api';
+import { demoAck, isDemo } from './demo'; // 【仮】デモモード
 
 export const socket: Socket = io(API_ORIGIN, {
   autoConnect: false, // ログインしてから AuthContext が接続する
@@ -26,6 +27,11 @@ export type SocketAck = { ok: boolean; error?: string };
  */
 export const emitWithAck = (event: string, data: unknown): Promise<SocketAck> =>
   new Promise((resolve) => {
+    // 【仮】デモ中は緊急停止なども実機へ送らない
+    if (isDemo()) {
+      resolve(demoAck(event, data));
+      return;
+    }
     if (!socket.connected) {
       resolve({ ok: false, error: 'サーバーとのリアルタイム接続が切れています' });
       return;

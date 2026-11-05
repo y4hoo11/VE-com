@@ -1,7 +1,7 @@
 // src/services/socketService.ts
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { VehicleUpdatePayload, LogPayload } from '../types';
+import { VehicleUpdatePayload, LogPayload, SystemStatusPayload } from '../types';
 import { mqttService } from './mqttService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
@@ -37,6 +37,9 @@ class SocketService {
     this.io.on('connection', (socket: Socket) => {
       const user = socket.data.user as AuthUser;
       console.log(`[WebSocket] フロントエンド接続: ${socket.id} (${user.username})`);
+
+      // つながった画面に、今のサーバーの接続状態を知らせる
+      socket.emit('system:status', { mqtt: mqttService.isConnected() } satisfies SystemStatusPayload);
 
       // Web画面からの手動緊急停止指示
       socket.on('manual_emergency_stop', async (data: unknown, ack?: Ack) => {
@@ -114,8 +117,8 @@ class SocketService {
     });
   }
 
-  // ログをDBに保存して、フロントへ配信する
-  private async recordLog(vehicleId: string, level: LogLevel, message: string) {
+  // ログをDBに保存して、フロントへ配信する（他のサービスからも使う）
+  async recordLog(vehicleId: string, level: LogLevel, message: string) {
     const log = await prisma.vehicleLog.create({
       data: { vehicleId, logLevel: level, message },
     });
@@ -139,6 +142,27 @@ class SocketService {
   broadcastLog(logPayload: LogPayload) {
     if (this.io) {
       this.io.emit('log:new', logPayload);
+    }
+  }
+
+  // サーバーの接続状態（MQTT など）が変わったことを知らせる
+  broadcastSystemStatus(status: SystemStatusPayload) {
+    if (this.io) {
+      this.io.emit('system:status', status);
+    }
+  }
+
+  // 車両の登録・削除があったことを知らせる（フロントはこれを受けて車両一覧を取り直す）
+  broadcastVehiclesChanged() {
+    if (this.io) {
+      this.io.emit('vehicles:changed');
+    }
+  }
+
+  // 運行の設定が変わったことを知らせる
+  broadcastSettingsChanged(settings: { ops: { battWarn: number; battMin: number } }) {
+    if (this.io) {
+      this.io.emit('settings:changed', settings);
     }
   }
 

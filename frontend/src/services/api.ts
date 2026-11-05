@@ -1,6 +1,7 @@
 // api.ts
 import axios from 'axios';
 import { AUTH_CONFIG } from '../config/Auth';
+import { demoAdapter, isDemo } from './demo'; // 【仮】デモモード
 
 // バックエンドのURL（API と Socket.IO の両方で使う）
 export const API_ORIGIN = 'http://localhost:3001';
@@ -21,6 +22,8 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // 【仮】デモ中はログイン以外をサーバーへ送らない
+  if (isDemo() && config.url !== '/login') config.adapter = demoAdapter;
   return config;
 });
 
