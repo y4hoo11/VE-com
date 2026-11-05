@@ -1,0 +1,11 @@
+image: simple.pgm
+mode: trinary
+resolution: 0.15       # 1ピクセルあたり0.15メートル（15cm）
+origin: [-3.000, -3.000, 0.0] # 原点（地図の左下端が世界のどの座標か）
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.25
+# 単純化: 四角い部屋 + 中央に箱 1 個
+# 実寸の倍率: 基準の 3 倍
+# サイズ: 200x120px = 30m x 18m
+# スタート位置(x, y)[m]: [0.00, 0.00]   # 原点に合わせてある
