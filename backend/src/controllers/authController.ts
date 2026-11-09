@@ -50,11 +50,3 @@ export const login = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'ログイン処理に失敗しました' });
   }
 };
-
-/**
- * GET /api/me
- * 今のトークンのユーザー情報を返す（トークンがまだ有効かの確認用）
- */
-export const getMe = (req: Request, res: Response) => {
-  res.json({ user: req.user });
-};

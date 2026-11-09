@@ -4,8 +4,8 @@ import { Server, Socket } from 'socket.io';
 import { VehicleUpdatePayload, LogPayload, SystemStatusPayload } from '../types';
 import { mqttService } from './mqttService';
 import { prisma } from '../config/database';
-import { VehicleStatus, LogLevel } from '@prisma/client';
-import { verifyToken } from '../middleware/auth';
+import { VehicleStatus, LogLevel, Role } from '@prisma/client';
+import { authenticate } from '../middleware/auth';
 import type { AuthUser } from '../types/express';
 
 // フロントからのイベントに返す結果（フロントはこれで成功・失敗を表示する）
@@ -25,13 +25,21 @@ class SocketService {
       cors: { origin: '*' },
     });
 
-    // 接続時にトークンを確認する（フロントは io(url, { auth: { token } }) で送る）
+    // 接続時にトークンを確認する（フロントは io(url, { auth: { token } }) で送る）。
+    // 削除されたユーザーはつながらない（画面はログイン画面に戻る）
     this.io.use((socket, next) => {
       const token = socket.handshake.auth?.token;
-      const user = typeof token === 'string' ? verifyToken(token) : null;
-      if (!user) return next(new Error('unauthorized'));
-      socket.data.user = user;
-      next();
+      if (typeof token !== 'string') return next(new Error('unauthorized'));
+      authenticate(token)
+        .then((user) => {
+          if (!user) return next(new Error('unauthorized'));
+          socket.data.user = user;
+          next();
+        })
+        .catch((e) => {
+          console.error('[WebSocket] 認証エラー:', e);
+          next(new Error('auth_failed'));
+        });
     });
 
     this.io.on('connection', (socket: Socket) => {
@@ -70,7 +78,9 @@ class SocketService {
       });
 
       // Web画面の「確認」ボタン等による緊急状態の解除
+      // 緊急状態の解除（ADMIN と OPERATOR だけ。緊急停止は安全のため VIEWER も押せる）
       socket.on('acknowledge_emergency', async (data: unknown, ack?: Ack) => {
+        if (user.role === Role.VIEWER) return ack?.({ ok: false, error: '閲覧のみの権限では解除できません' });
         const vehicleId = getVehicleId(data);
         if (!vehicleId) return ack?.({ ok: false, error: '車両IDが指定されていません' });
 
@@ -170,6 +180,22 @@ class SocketService {
   broadcastTasksChanged() {
     if (this.io) {
       this.io.emit('tasks:changed');
+    }
+  }
+
+  // ユーザーの追加・変更・削除を知らせる（管理者の画面が一覧を取り直す）
+  broadcastUsersChanged() {
+    if (this.io) {
+      this.io.emit('users:changed');
+    }
+  }
+
+  // そのユーザーのリアルタイム接続を切る（削除・権限変更のあと）。
+  // 画面は自動で再接続し、そのとき最新の権限で確認される。削除されていればログイン画面に戻る
+  disconnectUser(userId: string) {
+    if (!this.io) return;
+    for (const s of this.io.sockets.sockets.values()) {
+      if ((s.data.user as AuthUser | undefined)?.id === userId) s.disconnect(true);
     }
   }
 }

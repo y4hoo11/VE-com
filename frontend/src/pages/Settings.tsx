@@ -2,8 +2,11 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { ST } from '../store/data';
-import { askDeleteUser, askDeleteVehicle, emit, NOT_SUPPORTED, openModal, playAlarm, restartDemo, saveOps, savePrefs, setDemoMode, setTestOnline, toast, useStore } from '../store/store';
+import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, restartDemo, saveOps, savePrefs, setDemoMode, setTestOnline, toast, useStore } from '../store/store';
 import { Btn, Card, cx, fmtT, inputCls, Kv, Tag, VChip } from '../components/ui';
+
+// 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める
+const DEMO_NA = 'デモモード中は使えません（設定 → デモ で終了してください）';
 
 const MENU: [string, string, boolean][] = [
   ['display', '表示', false],
@@ -154,7 +157,9 @@ function Account() {
           ['登録日', u?.created ?? '—'],
         ]}
       />
-      <Btn disabled title={NOT_SUPPORTED} onClick={() => openModal({ kind: 'password' })}>パスワードを変更… <Tag tone="amber">未対応</Tag></Btn>
+      <Btn disabled={s.demo} title={s.demo ? DEMO_NA : undefined} onClick={() => openModal({ kind: 'password' })}>
+        パスワードを変更…
+      </Btn>
     </Card>
   );
 }
@@ -277,7 +282,14 @@ function Vehicles() {
 function Users() {
   const s = useStore();
   return (
-    <Card title={<>ユーザー <span className="text-xs font-normal text-slate-500">ユーザー管理のAPIが無いため、ログイン中のアカウントだけ表示しています</span></>} right={<Btn variant="pri" disabled title={NOT_SUPPORTED} onClick={() => openModal({ kind: 'user' })}>＋ ユーザーを追加 <Tag tone="amber">未対応</Tag></Btn>}>
+    <Card
+      title={<>ユーザー {s.demo && <span className="text-xs font-normal text-slate-500">{DEMO_NA}</span>}</>}
+      right={
+        <Btn variant="pri" disabled={s.demo} title={s.demo ? DEMO_NA : undefined} onClick={() => openModal({ kind: 'user' })}>
+          ＋ ユーザーを追加
+        </Btn>
+      }
+    >
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
           <tr>
@@ -300,10 +312,16 @@ function Users() {
               </td>
               <td className="py-2 text-slate-500">{u.created}</td>
               <td className="space-x-2 py-2 pr-4 text-right">
-                <Btn size="sm" disabled title={NOT_SUPPORTED} onClick={() => openModal({ kind: 'user', userId: u.id })}>
+                <Btn size="sm" disabled={s.demo} title={s.demo ? DEMO_NA : undefined} onClick={() => openModal({ kind: 'user', userId: u.id })}>
                   編集
                 </Btn>
-                <Btn size="sm" variant="dangerO" disabled title={NOT_SUPPORTED} onClick={() => askDeleteUser(u.id)}>
+                <Btn
+                  size="sm"
+                  variant="dangerO"
+                  disabled={s.demo || u.name === s.user.name}
+                  title={s.demo ? DEMO_NA : u.name === s.user.name ? '自分自身は削除できません' : undefined}
+                  onClick={() => askDeleteUser(u.id)}
+                >
                   削除
                 </Btn>
               </td>
