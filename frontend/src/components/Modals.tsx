@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { WAYPOINTS, type Role } from '../store/data';
 import {
   candidates,
+  changePassword,
   closeModal,
   createTask,
   openModal,
@@ -307,6 +308,20 @@ function PasswordModal() {
   const [n1, setN1] = useState('');
   const [n2, setN2] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!cur) return setError('今のパスワードを入力してください');
+    if (n1.length < 8) return setError('新しいパスワードは 8 文字以上にしてください');
+    if (n1 !== n2) return setError('確認用のパスワードが一致しません');
+    setBusy(true);
+    try {
+      await changePassword(cur, n1);
+      closeModal();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'パスワードの変更に失敗しました');
+      setBusy(false);
+    }
+  };
   return (
     <Frame
       title="パスワードの変更"
@@ -314,15 +329,7 @@ function PasswordModal() {
       footer={
         <>
           <Btn onClick={closeModal}>キャンセル</Btn>
-          <Btn
-            variant="pri"
-            onClick={() => {
-              if (!cur) return setError('今のパスワードを入力してください');
-              if (n1.length < 8) return setError('新しいパスワードは 8 文字以上にしてください');
-              if (n1 !== n2) return setError('確認用のパスワードが一致しません');
-              return setError('パスワード変更のAPIがまだ無いため、変更できません');
-            }}
-          >
+          <Btn variant="pri" disabled={busy} onClick={submit}>
             変更する
           </Btn>
         </>
@@ -357,6 +364,23 @@ function UserModal({ userId }: { userId?: string }) {
   const [role, setRole] = useState<Role>(u?.role ?? 'OPERATOR');
   const [pw, setPw] = useState('');
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const self = !!u && u.name === S.user.name; // 自分の権限は変えられない（サーバーでも断る）
+  const submit = async () => {
+    if (!name.trim() || /\s/.test(name.trim())) return setError('ユーザー名を空白なしで入力してください');
+    if (S.users.some((x) => x.name === name.trim() && x.id !== userId)) return setError('そのユーザー名は使われています');
+    if (!/^[^\s@]+@[^\s@]+$/.test(email.trim())) return setError('メールアドレスの形が正しくありません');
+    if (!u && pw.length < 8) return setError('初期パスワードは 8 文字以上にしてください');
+    if (u && pw && pw.length < 8) return setError('新しいパスワードは 8 文字以上にしてください');
+    setBusy(true);
+    try {
+      await saveUser({ id: userId, name: name.trim(), email: email.trim(), role, password: pw || undefined });
+      closeModal();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '保存に失敗しました');
+      setBusy(false);
+    }
+  };
   return (
     <Frame
       title={u ? `ユーザーの編集（${u.name}）` : 'ユーザーの追加'}
@@ -364,17 +388,7 @@ function UserModal({ userId }: { userId?: string }) {
       footer={
         <>
           <Btn onClick={closeModal}>キャンセル</Btn>
-          <Btn
-            variant="pri"
-            onClick={() => {
-              if (!name.trim()) return setError('ユーザー名を入力してください');
-              if (S.users.some((x) => x.name === name.trim() && x.id !== userId)) return setError('そのユーザー名は使われています');
-              if (!/^\S+@\S+$/.test(email)) return setError('メールアドレスの形が正しくありません');
-              if (!u && pw.length < 8) return setError('初期パスワードは 8 文字以上にしてください');
-              closeModal();
-              saveUser({ id: userId, name: name.trim(), email, role });
-            }}
-          >
+          <Btn variant="pri" disabled={busy} onClick={submit}>
             {u ? '保存' : '追加'}
           </Btn>
         </>
@@ -390,15 +404,18 @@ function UserModal({ userId }: { userId?: string }) {
         <div className="space-y-1.5">
           {(['ADMIN', 'OPERATOR', 'VIEWER'] as Role[]).map((r) => (
             <label key={r} className="flex items-center gap-2 text-sm">
-              <input type="radio" checked={role === r} onChange={() => setRole(r)} />
+              <input type="radio" disabled={self} checked={role === r} onChange={() => setRole(r)} />
               <b className="w-20">{r}</b>
               <span className="text-slate-500">{ROLE_LABEL[r]}</span>
             </label>
           ))}
+          {self && <div className="text-xs text-slate-500">自分の権限は変更できません（ほかの管理者に変更してもらってください）</div>}
         </div>
       </Field>
       {u ? (
-        <div className="text-xs text-slate-500">パスワードは本人が「パスワードの変更」から変えます。</div>
+        <Field label="パスワードの再設定" hint="忘れたときだけ入力（8 文字以上）。空のままなら変わりません。本人は後で自分で変更できます">
+          <input type="password" autoComplete="new-password" className={inputCls} value={pw} onChange={(e) => setPw(e.target.value)} />
+        </Field>
       ) : (
         <Field label="初期パスワード" hint="8 文字以上。最初のログイン後に本人が変更します">
           <input type="password" className={inputCls} value={pw} onChange={(e) => setPw(e.target.value)} />

@@ -9,7 +9,7 @@ import {
   estop,
   logout,
   nav,
-  NOT_SUPPORTED,
+  openModal,
   openVehicle,
   stopAll,
   task,
@@ -253,7 +253,7 @@ function UserPop() {
         <div className="text-xs text-slate-500">権限: {s.user.role}</div>
       </div>
       <div className="flex gap-2">
-        <Btn size="sm" disabled title={NOT_SUPPORTED}>
+        <Btn size="sm" disabled={s.demo} title={s.demo ? 'デモモード中は使えません' : undefined} onClick={() => openModal({ kind: 'password' })}>
           パスワード変更
         </Btn>
         <Btn size="sm" onClick={() => { nav('/'); logout(); }}>

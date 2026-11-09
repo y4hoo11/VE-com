@@ -18,6 +18,12 @@ socket.on('connect_error', (err) => {
   }
 });
 
+// サーバー側から切られたとき（権限が変わったときなど）は自動では再接続されないので、つなぎ直す。
+// 削除されたユーザーなら、つなぎ直しが unauthorized になってログイン画面に戻る
+socket.on('disconnect', (reason) => {
+  if (reason === 'io server disconnect') socket.connect();
+});
+
 // サーバーから返ってくる処理結果
 export type SocketAck = { ok: boolean; error?: string };
 

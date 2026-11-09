@@ -155,7 +155,7 @@ export const S = {
   tasks: [] as Task[],
   logs: [] as Log[],
   notes: [] as Note[],
-  users: [] as User[], // ユーザー一覧のAPIが無いので、ログイン中の本人だけ
+  users: [] as User[], // 管理者は全員、それ以外はログイン中の本人だけ
   toasts: [] as Toast[],
   drawer: null as DrawerState,
   modal: null as ModalState,
@@ -379,6 +379,7 @@ export async function loadTaskHistory(id: string) {
 }
 
 async function reloadAll() {
+  loadAccount(); // 失敗しても、ほかの表示は続ける
   try {
     await Promise.all([loadVehicles(), loadTasks(), loadLogs(), loadSettings()]);
     relink();
@@ -387,6 +388,45 @@ async function reloadAll() {
   } catch (e) {
     console.error('データの取得に失敗しました:', e);
     toast('サーバーからデータを取得できませんでした', 'error');
+  }
+}
+
+// ---------------------------------------------------------------
+// ログイン中のユーザーとユーザー一覧（GET /api/me、GET /api/users）
+// ---------------------------------------------------------------
+interface ApiUser {
+  id: string;
+  username: string;
+  email: string;
+  role: Role;
+  createdAt: string;
+}
+const toUser = (a: ApiUser): User => ({
+  id: a.id,
+  name: a.username,
+  email: a.email,
+  role: a.role,
+  created: new Date(a.createdAt).toLocaleDateString('ja-JP'),
+});
+
+async function loadUsers() {
+  if (S.user.role !== 'ADMIN') return;
+  const res = await api.get<ApiUser[]>('/users');
+  S.users = res.data.map(toUser);
+}
+
+// 権限は管理者が変えることがあるので、つながるたびにサーバーの最新を読む
+async function loadAccount() {
+  if (S.demo) return; // 【仮】デモ中はユーザーのAPIを使わない
+  try {
+    const res = await api.get<{ user: ApiUser }>('/me');
+    const me = toUser(res.data.user);
+    S.user = { name: me.name, role: me.role };
+    S.users = [me];
+    await loadUsers();
+    emit();
+  } catch (e) {
+    console.error('ユーザー情報の取得に失敗しました:', e);
   }
 }
 
@@ -527,6 +567,11 @@ function listen() {
   on('settings:changed', (st: { ops?: OpsSettings }) => {
     applyOps(st?.ops);
     emit();
+  });
+
+  // ユーザーの追加・変更・削除（自分の名前が変わったときのため、本人の情報も読み直す）
+  on('users:changed', () => {
+    loadAccount();
   });
 }
 
@@ -858,8 +903,54 @@ export function candidates(tid: string) {
 // ---------------------------------------------------------------
 // 設定（ユーザー）— APIが無いので未対応
 // ---------------------------------------------------------------
-export const saveUser = (_d: { id?: string; name: string; email: string; role: Role }) => notSupported();
-export const askDeleteUser = (_id: string) => notSupported();
+// 追加・保存。password は、追加では初期パスワード、編集では再設定（空なら変えない）。
+// 失敗したら Error（画面にそのまま出す文言）を投げる
+export async function saveUser(d: { id?: string; name: string; email: string; role: Role; password?: string }) {
+  const body = { username: d.name, email: d.email, role: d.role, ...(d.password ? { password: d.password } : {}) };
+  try {
+    if (d.id) await api.patch(`/users/${encodeURIComponent(d.id)}`, body);
+    else await api.post('/users', body);
+  } catch (e) {
+    throw new Error(errMsg(e, d.id ? 'ユーザーの保存に失敗しました' : 'ユーザーの追加に失敗しました'), { cause: e });
+  }
+  await loadAccount();
+  toast(d.id ? `${d.name} を保存しました${d.password ? '（パスワードを再設定しました）' : ''}` : `${d.name} を追加しました`, 'ok');
+}
+
+export function askDeleteUser(id: string) {
+  const u = S.users.find((x) => x.id === id);
+  if (!u) return;
+  openModal({
+    kind: 'confirm',
+    title: `${u.name} を削除`,
+    body: 'このユーザーを削除します。ログイン中なら、すぐにログイン画面に戻ります。',
+    detail: ['作成したタスクは残ります（作成者は空欄になります）。', '元に戻せません。'],
+    ok: '削除する',
+    danger: true,
+    onOk: () => deleteUser(id),
+  });
+}
+
+async function deleteUser(id: string) {
+  const u = S.users.find((x) => x.id === id);
+  try {
+    await api.delete(`/users/${encodeURIComponent(id)}`);
+    await loadAccount();
+    toast(`${u?.name ?? id} を削除しました`, 'warn');
+  } catch (e) {
+    toast(errMsg(e, 'ユーザーの削除に失敗しました'), 'error');
+  }
+}
+
+// 自分のパスワードの変更。失敗したら Error（画面にそのまま出す文言）を投げる
+export async function changePassword(currentPassword: string, newPassword: string) {
+  try {
+    await api.put('/me/password', { currentPassword, newPassword });
+  } catch (e) {
+    throw new Error(errMsg(e, 'パスワードの変更に失敗しました'), { cause: e });
+  }
+  toast('パスワードを変更しました', 'ok');
+}
 
 // ---------------------------------------------------------------
 // 設定（車両）— POST / PATCH / DELETE /api/vehicles（ADMIN のみ）
