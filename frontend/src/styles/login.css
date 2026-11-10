@@ -122,20 +122,24 @@
   box-shadow: 0 0 0 1000px var(--input-bg) inset;
 }
 
-/* パスワード表示切替 */
+/* パスワード表示切替（目のアイコン） */
 .password-wrap { position: relative; }
-.field-input--password { padding-right: 64px; }
+.field-input--password { padding-right: 44px; }
 .password-toggle {
   position: absolute;
   top: 50%;
   right: 6px;
   transform: translateY(-50%);
-  padding: 6px 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   color: var(--text-sub);
   border: none;
   border-radius: 6px;
-  font-size: 12px;
   cursor: pointer;
 }
 .password-toggle:hover { color: var(--text); }
@@ -184,4 +188,3 @@
   .login-card   { padding: 32px 20px 24px; }
   .logo         { font-size: 38px; }
 }
-
