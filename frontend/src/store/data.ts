@@ -216,3 +216,96 @@ export const COL: Record<VStatus, string> = {
   OFFLINE: '#9ca3af',
 };
 export const PAUSED_COL = '#d97706';
+
+// ---------------------------------------------------------------
+// 設定変更の申請（setting_classification.xlsx の「設定項目の分類」「ランク定義」）
+// 項目・範囲・既定値は backend/src/controllers/changeRequestController.ts の SETTING_ITEMS と合わせる
+// ---------------------------------------------------------------
+export type Rank = 1 | 2 | 3;
+export type SettingItem = { key: string; label: string; rank: Rank; scope: string; def: string } & (
+  | { type: 'number'; unit: string; deltaUnit?: string; min: number; max: number; step: number; hardLimit?: boolean }
+  | { type: 'text'; placeholder: string }
+  | { type: 'select'; options: string[] }
+);
+
+// 【仮】申請できる範囲は仮の値
+export const SETTING_ITEMS: SettingItem[] = [
+  { key: 'logRetention', label: 'ログの保存期間', rank: 1, scope: '全社', def: '90', type: 'number', unit: '日', min: 30, max: 365, step: 1 },
+  { key: 'battWarn', label: 'バッテリー警告のしきい値', rank: 2, scope: '全車両', def: '30', type: 'number', unit: '%', deltaUnit: 'ポイント', min: 10, max: 50, step: 1 },
+  { key: 'battMin', label: '割り当てない残量（充電に戻る基準）', rank: 2, scope: '全車両', def: '20', type: 'number', unit: '%', deltaUnit: 'ポイント', min: 10, max: 50, step: 1 },
+  { key: 'hours', label: '稼働時間帯（走行を許可する時間）', rank: 2, scope: '全車両', def: '終日', type: 'text', placeholder: '例：08:00〜18:00' },
+  { key: 'waypoints', label: '登録地点（経由地・目的地）の追加・位置変更', rank: 2, scope: '全車両', def: '現在の登録地点', type: 'text', placeholder: '追加・移動する地点と、その位置' },
+  { key: 'maxSpeed', label: '最高速度（agv.max_speed）', rank: 3, scope: '全車両', def: '5', type: 'number', unit: 'km/h', min: 1, max: 6, step: 0.5, hardLimit: true },
+  { key: 'obstacle', label: '障害物検知で減速・停止を始める距離', rank: 3, scope: '全車両', def: '0.45', type: 'number', unit: 'm', min: 0.2, max: 2, step: 0.05 },
+  { key: 'keepout', label: '立入禁止エリアの追加・削除', rank: 3, scope: '全車両', def: '未設定', type: 'text', placeholder: '追加・削除するエリアと、その範囲' },
+  { key: 'map', label: '使用する地図の切り替え', rank: 3, scope: '全車両', def: 'warehouse_map', type: 'select', options: ['warehouse_map', 'warehouse_a', 'warehouse_b', 'demo_map', 'simple', 'maze'] },
+];
+export const settingItem = (key: string) => SETTING_ITEMS.find((i) => i.key === key);
+export const fmtSetting = (key: string, v: string | null | undefined) => {
+  const i = settingItem(key);
+  return v == null ? '—' : i?.type === 'number' ? `${v} ${i.unit}` : v;
+};
+
+/** 希望する値の確かめ（画面側。サーバーでも同じ確認をする） */
+export function valueError(item: SettingItem, raw: string, cur: string): string | null {
+  const v = raw.trim();
+  if (!v) return '希望する値を入力してください';
+  if (v === cur) return '現在の値と同じです';
+  if (item.type === 'number') {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '数値で入力してください';
+    if (item.step >= 1 && !Number.isInteger(n)) return '整数で入力してください';
+    if (n < item.min || n > item.max) return `${item.min}〜${item.max} ${item.unit} の範囲で入力してください`;
+  }
+  return null;
+}
+
+// 必要な承認の人数（申請者以外の管理者）
+export const needApprovals = (rank: number) => (rank >= 3 ? 2 : 1);
+
+export const RANKS = {
+  1: { short: 'L1', badge: '危険度 L1（低）', tone: 'green', cls: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300', sub: '変更したい項目を選び、理由を添えて申請します。', approvers: 1, need: '最高権限者 1 人', step: '最高権限者 1 人', when: 'すぐに反映', reflect: '承認されると、すぐに設定へ反映されます。' },
+  2: { short: 'L2', badge: '危険度 L2（中）', tone: 'amber', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300', sub: '変更したい項目を選び、理由と効果を添えて申請します。', approvers: 1, need: '最高権限者 1 人', step: '最高権限者 1 人', when: '次の待機時', reflect: '走行中の車両には、次の待機時に反映されます。' },
+  3: { short: 'L3', badge: '危険度 L3（高）', tone: 'red', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300', sub: '理由・効果・安全ルール案を添えて、誓約のうえ申請します。', approvers: 2, need: '申請者以外の最高権限者 2 人', step: '最高権限者 2 人', when: '停止中のみ', reflect: '対象の車両が停止中のときだけ反映されます。SHRAGD にも通知されます。' },
+} as const;
+
+export type ReqStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'APPLIED';
+export const REQ_STATUS: Record<ReqStatus, { label: string; cls: string }> = {
+  PENDING: { label: '承認待ち', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+  APPROVED: { label: '変更待ち', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300' },
+  REJECTED: { label: '不承認', cls: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' },
+  WITHDRAWN: { label: '取り下げ', cls: 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400' },
+  APPLIED: { label: '変更済み', cls: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300' },
+};
+
+export interface Review {
+  name: string;
+  decision: 'APPROVE' | 'REJECT';
+  comment: string;
+  at: number;
+}
+
+export interface ChangeRequest {
+  id: string;
+  key: string;
+  label: string;
+  rank: Rank;
+  cur: string; // 申請したときの値
+  value: string; // 希望する値
+  reason: string;
+  effect: string;
+  rule: string;
+  pledgedAt: number | null;
+  status: ReqStatus;
+  direct: boolean; // 管理者が申請なしで変更した記録
+  requester: string;
+  reviews: Review[];
+  appliedValue: string | null;
+  appliedBy: string | null;
+  signature: string | null;
+  appliedAt: number | null;
+  at: number;
+  updatedAt: number;
+}
+export const approvalsOf = (r: ChangeRequest) => r.reviews.filter((v) => v.decision === 'APPROVE');
+export const isOpenReq = (r: ChangeRequest) => r.status === 'PENDING' || r.status === 'APPROVED';

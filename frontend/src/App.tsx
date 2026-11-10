@@ -83,7 +83,7 @@ function Main() {
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/logs" element={<Logs />} />
               <Route path="/map" element={<MapPage />} />
-              <Route path="/settings/:sub?" element={<Settings />} />
+              <Route path="/settings/:sub?/:rid?" element={<Settings />} />
               <Route path="*" element={<Monitor />} />
             </Routes>
           </div>
