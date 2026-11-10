@@ -1,148 +1,190 @@
-:root {
-  --color-page-bg: #eef0f3;
-  --color-card-bg: #6e6e6e;
-  --color-green: #6fcf43;
-  --color-text-dark: #161616;
-  --color-white: #ffffff;
-  --color-error: #ff6b6b;
-  --font-base: system-ui, -apple-system, "Hiragino Sans", sans-serif;
-}
-
 .login-screen {
-  min-height: 100vh;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-base);
-}
+  --bg: #17181c;
+  --card-bg: #232429;
+  --card-border: #34363d;
+  --green: #6fcf43;
+  --green-hover: #82dd58;
+  --text: #f2f3f5;
+  --text-sub: #9a9da6;
+  --input-bg: #17181c;
+  --input-border: #3a3c44;
+  --error: #ff6b6b;
 
-.login-card {
   position: relative;
   overflow: hidden;
   box-sizing: border-box;
-  width: 100%;
   min-height: 100vh;
-  padding: 56px 64px;
-  background: var(--color-card-bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
+  width: 100%;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Hiragino Sans", sans-serif;
 }
 
+/* 背景の斜めの縞（装飾） */
 .stripe {
   position: absolute;
-  background: var(--color-green);
-  z-index: 0;
+  background: var(--green);
+  pointer-events: none;
+}
+.stripe--top      { width: 320px; height: 90px; top: -30px;    left: -90px;   transform: rotate(-38deg); }
+.stripe--bottom-1 { width: 320px; height: 34px; bottom: -6px;  right: -70px;  transform: rotate(-38deg); }
+.stripe--bottom-2 { width: 320px; height: 34px; bottom: -66px; right: -120px; transform: rotate(-38deg); }
+
+/* 背景を走る AGV（LoginBackground.tsx） */
+.login-background {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1280px;
+  height: 800px;
+  transform: translateX(-50%);
+  overflow: visible;
+  pointer-events: none;
 }
 
-.stripe--top {
-  width: 320px;
-  height: 90px;
-  top: -30px;
-  left: -90px;
-  transform: rotate(-38deg);
+@media (prefers-reduced-motion: reduce) {
+  .login-background { display: none; }
 }
 
-.stripe--bottom-1 {
-  width: 320px;
-  height: 34px;
-  bottom: -6px;
-  right: -70px;
-  transform: rotate(-38deg);
-}
-
-.stripe--bottom-2 {
-  width: 320px;
-  height: 34px;
-  bottom: -66px;
-  right: -120px;
-  transform: rotate(-38deg);
-}
-
-.logo {
+/* カード */
+.login-card {
   position: relative;
   z-index: 1;
-  margin: 0;
-  font-size: 48px;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-.logo-accent {
-  color: var(--color-green);
-}
-
-.logo-rest {
-  color: var(--color-text-dark);
-}
-
-.fields {
-  position: relative;
-  z-index: 1;
+  box-sizing: border-box;
+  width: min(100%, 500px);
+  padding: 40px 36px 32px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  width: 100%;
-  max-width: 420px;
+  gap: 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
 }
 
+.login-header { text-align: center; }
+.logo {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  line-height: 1.1;
+}
+.logo-accent { color: var(--green); }
+.logo-rest   { color: var(--text); }
+.login-subtitle {
+  margin: 8px 0 0;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  color: var(--text-sub);
+}
+
+/* 入力欄 */
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
 .field {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-text-dark);
+  flex-direction: column;
+  gap: 6px;
 }
-
 .field-label {
-  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
 }
-
-.bracket {
-  font-weight: 700;
-  font-size: 20px;
-}
-
 .field-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 2px;
-  background: var(--color-white);
-  font-size: 14px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  font-size: 15px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field-input::placeholder { color: #8a8d96; }
+.field-input:focus {
+  outline: none;
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(111, 207, 67, 0.25);
+}
+/* ブラウザの自動入力で背景が白くなるのを防ぐ */
+.field-input:-webkit-autofill {
+  -webkit-text-fill-color: var(--text);
+  box-shadow: 0 0 0 1000px var(--input-bg) inset;
 }
 
-.field-input::placeholder {
-  color: #9a9a9a;
-}
-
-.login-button {
-  position: relative;
-  z-index: 1;
-  padding: 10px 40px;
+/* パスワード表示切替（目のアイコン） */
+.password-wrap { position: relative; }
+.field-input--password { padding-right: 44px; }
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-sub);
   border: none;
-  border-radius: 2px;
-  background: var(--color-white);
-  color: var(--color-text-dark);
-  font-size: 18px;
-  font-weight: 700;
+  border-radius: 6px;
   cursor: pointer;
 }
+.password-toggle:hover { color: var(--text); }
+.password-toggle:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+}
 
+/* エラー */
+.error-message {
+  margin: 0;
+  padding: 10px 12px;
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  border-radius: 8px;
+  color: var(--error);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ログインボタン */
+.login-button {
+  height: 46px;
+  background: var(--green);
+  color: #030304;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.login-button:hover:not(:disabled) { background: var(--green-hover); }
+.login-button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
 .login-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
-.error-message {
-  position: relative;
-  z-index: 1;
-  color: var(--color-error);
-  font-size: 13px;
-  margin: 0;
-  font-weight: 600;
+/* 小さい画面 */
+@media (max-width: 480px) {
+  .login-screen { padding: 16px; }
+  .login-card   { padding: 32px 20px 24px; }
+  .logo         { font-size: 38px; }
 }
