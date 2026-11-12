@@ -2,6 +2,7 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { ST } from '../store/data';
+import { API_ORIGIN } from '../services/api';
 import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, restartDemo, saveOps, savePrefs, setDemoMode, setTestOnline, toast, useStore } from '../store/store';
 import { Btn, Card, inputCls, Kv, Tag, VChip } from '../components/ui';
 import { cx, fmtT } from '../components/uiUtils';
@@ -339,8 +340,8 @@ function System() {
   const ok = (b: boolean, t = '正常', f = '切断') => <span className={b ? 'text-green-600' : 'font-bold text-red-600'}>● {b ? t : f}</span>;
   return (
     <div className="space-y-3">
-      <Card title={<>接続 <span className="text-xs font-normal text-slate-500">接続先の変更はサーバーの .env で行います（画面からは変えません）</span></>} bodyClass="px-5">
-        <Row label="ブラウザ ⇔ サーバー" hint="Socket.IO">{ok(s.server, '接続中')}</Row>
+      <Card title={<>接続 <span className="text-xs font-normal text-slate-500">接続先の変更は .env で行います（画面からは変えません）</span></>} bodyClass="px-5">
+        <Row label="ブラウザ ⇔ サーバー" hint={`Socket.IO ・ ${API_ORIGIN}（frontend/.env の VITE_API_ORIGIN）`}>{ok(s.server, '接続中')}</Row>
         <Row label="サーバー ⇔ MQTTブローカー" hint="mqtt://localhost:1883（Mosquitto）">{ok(s.mqtt, '接続中')}</Row>
         <Row label="データベース" hint="PostgreSQL agv_warehouse">{ok(s.loaded, '正常', '取得できません')}</Row>
       </Card>

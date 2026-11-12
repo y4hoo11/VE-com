@@ -3,8 +3,12 @@ import axios from 'axios';
 import { AUTH_CONFIG } from '../config/Auth';
 import { demoAdapter, isDemo } from './demo'; // 【仮】デモモード
 
-// バックエンドのURL（API と Socket.IO の両方で使う）
-export const API_ORIGIN = 'http://localhost:3001';
+// バックエンドのURL（API と Socket.IO の両方で使う）。
+// frontend/.env の VITE_API_ORIGIN があればそれを使う。無ければ「この画面を開いた PC の 3001 番」。
+//   PC2 で http://localhost:5173 を開く            → http://localhost:3001
+//   ほかの端末で http://<PC2のIP>:5173 を開く       → http://<PC2のIP>:3001
+const fromEnv = import.meta.env.VITE_API_ORIGIN?.trim().replace(/\/+$/, '');
+export const API_ORIGIN = fromEnv || `${window.location.protocol}//${window.location.hostname}:3001`;
 
 export const api = axios.create({
   baseURL: `${API_ORIGIN}/api`,

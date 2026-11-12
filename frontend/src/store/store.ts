@@ -118,7 +118,9 @@ interface VehicleUpdate {
     vbat?: number;
     phase?: string;
     goal?: string;
-    paused?: boolean; // ROS 側に追加をお願いしている項目
+    paused?: boolean;
+    mode?: string; // NAV・WAIT・MANUAL・PAUSED・HOLD・RETRY_WAIT・IDLE・OFFLINE
+    note?: string; // mode の補足（HOLD の理由など）
   };
   // 【仮】デモモードのときだけ届く（実機の telemetry には無い項目）
   demo?: { paused: boolean; route: Pt[]; routeTotal: number; mode: Vehicle['mode']; wait: number; progress: number | null };
@@ -293,6 +295,8 @@ function toVehicle(a: ApiVehicle, prev?: Vehicle): Vehicle {
     route: [],
     routeTotal: 1,
     goal: prev?.goal ?? null,
+    rosMode: prev?.rosMode ?? null,
+    note: prev?.note ?? null,
     mode: 'IDLE',
     err: prev?.status === 'ERROR' && a.status === 'ERROR' ? prev.err : null,
     prevStatus: a.status,
@@ -510,6 +514,8 @@ function listen() {
       if (tm.phase !== undefined) v.phase = (['TO_START', 'LOADING', 'TO_TARGET', 'UNLOADING'].includes(tm.phase) ? tm.phase : null) as Phase | null;
       if (tm.goal !== undefined) v.goal = tm.goal || null;
       if (tm.paused !== undefined) v.paused = tm.paused;
+      if (tm.mode !== undefined) v.rosMode = tm.mode || null;
+      if (tm.note !== undefined) v.note = tm.note || null;
     }
     if (u.status !== undefined) {
       if (u.status === 'ERROR' && (v.status !== 'ERROR' || u.emergencyReason)) {

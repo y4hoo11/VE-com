@@ -55,6 +55,8 @@ export interface Vehicle {
   routeTotal: number;
   goal: string | null;
   mode: 'IDLE' | 'TASK' | 'GOTO';
+  rosMode: string | null; // PC1 がいま何をしているか（telemetry の mode。NAV・WAIT・HOLD など）
+  note: string | null; // rosMode の補足（HOLD の理由など。telemetry の note）
   err: VErr | null;
   prevStatus: VStatus;
   camera: string;
@@ -137,6 +139,24 @@ export const TS: Record<TStatus, string> = {
   CANCELLED: '取消',
   FAILED: '失敗',
 };
+// PC1 がいま何をしているか（telemetry の mode。docs/agv_protocol.md 2-2）
+// tone: info = ふつう、warn = 止まっていて人が気にした方がよい
+export const ROS_MODE: Record<string, { label: string; tone: 'info' | 'warn' }> = {
+  NAV: { label: '移動中', tone: 'info' },
+  WAIT: { label: '荷積み・荷降ろしの待ち', tone: 'info' },
+  MANUAL: { label: '手動操縦中', tone: 'info' },
+  PAUSED: { label: '一時停止中', tone: 'warn' },
+  HOLD: { label: '止まっています', tone: 'warn' },
+  RETRY_WAIT: { label: '経路のやり直し待ち', tone: 'warn' },
+};
+
+/** 画面に出す「いまの動作」。何もしていない（IDLE・OFFLINE・未受信）ときは null */
+export function rosModeText(v: Pick<Vehicle, 'rosMode' | 'note' | 'online'>) {
+  if (!v.online || !v.rosMode || v.rosMode === 'IDLE' || v.rosMode === 'OFFLINE') return null;
+  const m = ROS_MODE[v.rosMode] ?? { label: v.rosMode, tone: 'info' as const };
+  return { label: m.label, note: v.note || '', tone: m.tone };
+}
+
 export const PHASE: Record<Phase, string> = {
   TO_START: '出発地へ移動中',
   LOADING: '荷積み中',

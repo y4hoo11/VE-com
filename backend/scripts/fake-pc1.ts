@@ -310,12 +310,14 @@ class FakeVehicle {
       status: this.status,
       mapId: MAP_ID,
       speed: round(this.speed),
-      phase: this.phase ?? '',
-      taskId: this.task?.id ?? '',
-      goal: this.goal?.name ?? '',
-      mode: this.manual ? 'MANUAL' : this.goal ? 'NAV' : 'IDLE',
+      // 本物の mission_manager と同じく、無いときは null
+      phase: this.phase ?? null,
+      taskId: this.task?.id ?? null,
+      goal: this.goal?.name ?? null,
+      // 本物の mission_manager と同じ値（docs/agv_protocol.md 2-2）
+      mode: this.manual ? 'MANUAL' : this.paused ? 'PAUSED' : this.wait > 0 || this.waitingConfirm ? 'WAIT' : this.goal ? 'NAV' : 'IDLE',
       paused: this.paused,
-      note: 'fake-pc1',
+      note: '',
       locQuality: 0.95,
     });
   }

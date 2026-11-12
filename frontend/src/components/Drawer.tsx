@@ -1,6 +1,6 @@
 // 横から出てくるパネル（車両・タスク・ログ）。車両の中身は車両詳細ページでも使う
 import type { ReactNode } from 'react';
-import { ERR, PHASE, wpByName, type Vehicle } from '../store/data';
+import { ERR, PHASE, rosModeText, wpByName, type Vehicle } from '../store/data';
 import {
   askCancel,
   askClear,
@@ -81,6 +81,7 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
   const t = task(v.taskId);
   const vbat = v.vbat == null ? '' : `（${v.vbat.toFixed(2)} V）`;
   const off = !v.online;
+  const rm = rosModeText(v); // PC1 がいま何をしているか
   // 運行操作を送れないとき（理由をボタンの説明に出す）
   const ng = off ? 'オフラインの車両には送れません' : v.status === 'ERROR' ? '異常中は送れません（先に緊急状態を解除してください）' : null;
   const pauseBtn = v.paused ? (
@@ -133,6 +134,17 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             ['ラズパイ温度', off ? '—' : fmtNum(v.piTemp, 1, ' ℃')],
             ['ESP32 / LiDAR', off ? '—' : `${v.esp32 == null ? '—' : v.esp32 ? '正常' : '異常'} / ${fmtNum(v.lidarHz, 1, ' Hz')}`],
             ['行き先', v.goal ? `${v.goal}${wpByName(v.goal) ? `（${wpByName(v.goal)!.label}）` : ''}` : '—'],
+            [
+              '動作',
+              rm ? (
+                <span className={cx(rm.tone === 'warn' && 'font-bold text-amber-700 dark:text-amber-400')}>
+                  {rm.label}
+                  {rm.note && <span className="font-normal text-slate-500">（{rm.note}）</span>}
+                </span>
+              ) : (
+                '—'
+              ),
+            ],
           ]}
         />
       </Section>

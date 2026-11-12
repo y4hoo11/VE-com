@@ -8,4 +8,6 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   // ROS の地図画像（edge_ai/.../maps/*.pgm）を、画面に埋め込んで読み込めるようにする（src/store/map.ts）
   assetsInclude: ['**/*.pgm'],
+  // 同じネットワークのほかの端末からも http://<PC2のIP>:5173 で開けるようにする（標準ではこの PC からだけ）
+  server: { host: true },
 })

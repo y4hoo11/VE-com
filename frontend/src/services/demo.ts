@@ -311,6 +311,9 @@ function sendUpdate(v: DemoVehicle) {
       vbat: 6.4 + v.battery * 0.018,
       phase: v.phase ?? '',
       goal: v.goal ?? '',
+      // 本物の PC1 と同じ mode（docs/agv_protocol.md 2-2）
+      mode: v.manual ? 'MANUAL' : v.paused ? 'PAUSED' : v.wait > 0 ? 'WAIT' : v.route.length > 1 ? 'NAV' : 'IDLE',
+      note: '',
     },
     demo: { paused: v.paused, route: v.route.map((p) => ({ ...p })), routeTotal: v.routeTotal, mode: v.mode, wait: v.wait, progress: taskOf(v)?.progress ?? null },
   });

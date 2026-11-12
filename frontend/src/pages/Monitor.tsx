@@ -1,6 +1,6 @@
 // 運行モニター（ホーム）：地図＋車両一覧＋最新のログ。普段開いておく画面
 import { Link } from 'react-router-dom';
-import { COL, PHASE, TS } from '../store/data';
+import { COL, PHASE, rosModeText, TS } from '../store/data';
 import { MAP } from '../store/map';
 import { emit, estop, openLog, openVehicle, S, savePrefs, task, useStore } from '../store/store';
 import { MapView } from '../components/MapView';
@@ -66,6 +66,7 @@ export function Monitor() {
         {s.vehicles.map((v) => {
           const t = task(v.taskId);
           const sel = s.drawer?.type === 'vehicle' && s.drawer.id === v.id;
+          const rm = rosModeText(v);
           return (
             <div
               key={v.id}
@@ -107,6 +108,13 @@ export function Monitor() {
                   <span className="text-slate-400">タスクなし</span>
                 )}
               </div>
+              {/* 止まっている理由など、気にした方がよい動作だけ出す（移動中・荷待ちは上の表示でわかる） */}
+              {!v.err && rm?.tone === 'warn' && (
+                <div className="mt-2 truncate text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  ⏸ {rm.label}
+                  {rm.note && `（${rm.note}）`}
+                </div>
+              )}
               {v.err && <div className="mt-2 truncate text-xs font-semibold text-red-600">⚠ {v.err.reason}</div>}
               <div className="mt-2 flex justify-end">
                 <Btn
