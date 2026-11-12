@@ -92,8 +92,9 @@ export function VehicleDetail() {
 // ---------------------------------------------------------------
 type DriveKey = 'W' | 'A' | 'S' | 'D';
 const KEY_OF: Record<string, DriveKey> = { KeyW: 'W', KeyA: 'A', KeyS: 'S', KeyD: 'D' };
+// TT-02 は 0.12 m/s より遅いと車両側で 0.12 に上がるので、低速は 0.12 にしておく（docs/agv_protocol.md の MANUAL_DRIVE）
 const SPEEDS = [
-  { label: '低速', linear: 0.1, angular: 0.5 },
+  { label: '低速', linear: 0.12, angular: 0.5 },
   { label: '標準', linear: 0.2, angular: 0.8 },
   { label: '最大', linear: 0.3, angular: 1.0 }, // サーバーの上限と同じ
 ];
@@ -220,7 +221,7 @@ function ManualDrive({ v }: { v: Vehicle }) {
             <p className="m-0 text-slate-500">{reason}</p>
           ) : active ? (
             <p className="m-0">
-              <b>W</b> 前進 ・ <b>S</b> 後退 ・ <b>A</b> 左回り ・ <b>D</b> 右回り。キーを<b>押している間だけ</b>動きます。
+              <b>W</b> 前進 ・ <b>S</b> 後退 ・ <b>A</b> / <b>D</b> 左右に曲がる（<b>W・S と一緒に押す</b>。車なのでその場では回れません）。キーを<b>押している間だけ</b>動きます。
               <span className="text-red-600"> SPACE で緊急停止。</span>
             </p>
           ) : (

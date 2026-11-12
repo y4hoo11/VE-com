@@ -61,11 +61,30 @@ PC1 の `mqtt_bridge` が受け取り、ROS の `agv/command` として `mission
 | ホームへ戻る | `{"type":"RETURN_HOME"}` | PC1 |
 | 現在地を手動設定 | `{"action":"SET_POSE","x":-4.0,"y":-4.0,"theta":0.0}` | PC1 |
 | 荷積み/荷降ろし完了 | `{"action":"CONFIRM"}`（`wait_mode: confirm` のとき） | PC1 |
+| 手動操縦（追加） | `{"action":"MANUAL_DRIVE","linear":0.2,"angular":0.0}` | PC1 |
 
 `startLocation` / `targetLocation` は `edge_ai/ros2_ws/src/agv_navigation/config/waypoints.yaml` の名前（または別名）。
 `"1.5,-2.0"` のような「x,y」文字列も使えます。
 
 全車両一斉停止: `agv/broadcast/stop` に `{"action":"EMERGENCY_STOP"}`
+
+#### 手動操縦 `MANUAL_DRIVE`
+
+Web のキーボード操縦。キーを押している間、0.2 秒ごとに送る。キーを離したら `linear`・`angular` とも 0 を1回送る。
+
+| 項目 | 内容 |
+|---|---|
+| `linear` | 前後の速さ [m/s]。前が＋ |
+| `angular` | 回転 [rad/s]。左回りが＋（`/cmd_vel` と同じ向き） |
+
+- PC1 の `mission_manager` が受け取り、`/cmd_vel` に流す（10Hz）
+- 上限: 0.3 m/s・1.0 rad/s（`mission.yaml` の `manual`）。超えた値は上限に抑える
+- **0.5 秒届かなければ止める**（Web やネットワークが落ちたとき）。PC1 が落ちたときは、ラズパイの `serial_bridge` が `/cmd_vel` の途切れで止める
+- **タスク実行中（GOTO・RETURN_HOME を含む。待ち行列にあるときも）と緊急停止中は無視する**。操縦中にタスクが届いたら手動操縦を終えてタスクを始める
+- LiDAR の安全ガード（ラズパイ）は手動操縦中も効く
+- TT-02 は車なので**その場では回れない**。`linear` が 0 で `angular` だけ送ると、ハンドルを切るだけで動かない。
+  また 0.12 m/s より遅い指令は 0.12 m/s に引き上げられる（遅すぎると止まってしまうため）
+- 操縦中は telemetry の `mode` が `MANUAL` になる
 
 ### 2-2. 車両 → PC2: `agv/{id}/telemetry`（既存）
 
@@ -73,12 +92,27 @@ PC1 の `mqtt_bridge` が受け取り、ROS の `agv/command` として `mission
 
 | 送り手 | 周期 | JSON |
 |---|---|---|
-| PC1（mission_manager） | 2Hz | `{"x":-3.2,"y":-1.0,"theta":1.57,"status":"RUNNING","mapId":"demo_map","speed":0.4,"phase":"TO_TARGET","taskId":"…","goal":"Station-1","mode":"NAV","note":"","locQuality":0.92}` |
+| PC1（mission_manager） | 2Hz | `{"x":-3.2,"y":-1.0,"theta":1.57,"status":"RUNNING","mapId":"demo_map","speed":0.4,"phase":"TO_TARGET","taskId":"…","goal":"Station-1","mode":"NAV","note":"","paused":false,"queued":0,"locQuality":0.92}` |
 | ラズパイ（serial_bridge） | 1Hz | `{"battery":83,"name":"1号機","vbat":7.71,"piTemp":52.1,"esp32":true,"lidarHz":5.5}` |
 
 どちらも PC1 の `mqtt_bridge` が同じトピックに出す（ラズパイの分は ROS 経由で PC1 に届いたもの）。
 
 `status` は Prisma の `VehicleStatus` と同じ文字列だけ使う: `IDLE` `RUNNING` `CHARGING` `ERROR` `OFFLINE`
+
+`paused`: PAUSE を受けてから RESUME までの間 `true`（タスクが無いときも）。
+
+`mode`（PC1 がいま何をしているか）:
+
+| mode | 意味 |
+|---|---|
+| `IDLE` | 何もしていない |
+| `OFFLINE` | 車両（ラズパイ）からデータが来ていない |
+| `MANUAL` | 手動操縦中（MANUAL_DRIVE） |
+| `NAV` | Nav2 で移動中 |
+| `WAIT` | 荷積み・荷降ろしの待ち |
+| `PAUSED` | 移動の途中で一時停止中 |
+| `HOLD` | 移動の途中で止まっている（緊急停止・自己位置不明・車両のデータなし。理由は `note`） |
+| `RETRY_WAIT` | Nav2 が失敗したので、少し待ってやり直す |
 
 ### 2-3. 車両 → PC2: `agv/{id}/emergency`（既存）
 
@@ -110,6 +144,18 @@ PC1 の `mqtt_bridge` が受け取り、ROS の `agv/command` として `mission
 ```
 
 `status`: `IN_PROGRESS` `COMPLETED` `FAILED` `CANCELLED`（Prisma `TaskStatus` と同じ）
+
+**GOTO / RETURN_HOME（Web のタスクではない単発の移動）** も同じトピックで知らせる。`taskId` が `null` で、`command` と `goal` が付く:
+
+```json
+{"taskId":null,"command":"GOTO","goal":"Station-1","status":"FAILED","phase":"GOTO","progress":0,"message":"Station-1 へ移動できませんでした（Nav2 が経路を見つけられない/進めない）"}
+```
+
+- `command`: `GOTO` / `RETURN_HOME`
+- 行き先が waypoints に無いとき（GOTO の地点名・RETURN_HOME のホーム）は、受け取った時点で `FAILED`
+- Nav2 が経路を見つけられない・進めないときは、やり直し（`nav.retries` 回）の後に `FAILED`
+- 途中で 15 秒進めないときは、これまで通り emergency に `BLOCKED`（source: pc1）も出る
+- **`taskId` が `null` のものは DB のタスクと結び付けないこと**（画面のお知らせ・ログ用）
 
 ### 2-5. PC1 → (Web): `agv/{id}/path`（任意・表示用）
 

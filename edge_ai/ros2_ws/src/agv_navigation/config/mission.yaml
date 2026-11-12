@@ -28,6 +28,10 @@
       retry_delay_s: 3.0
       blocked_report_s: 15.0       # この秒数進めなければ Web に BLOCKED を通知
       fail_after_blocked_s: 60.0   # この秒数進めなければタスク失敗
+    manual:                        # Web のキーボード操縦（MANUAL_DRIVE）。タスク実行中・緊急停止中は無視
+      max_linear: 0.3              # 前後の速さの上限 [m/s]（0.12 より遅い指令は車両側で 0.12 に上がる）
+      max_angular: 1.0             # 回転の上限 [rad/s]
+      timeout_s: 0.5               # Web からこの秒数届かなければ止める
     localization:
       initial_pose: "Home"         # 起動時の現在地（地点名 or "x,y,向きdeg"）
       resume_pose_max_age_s: 1800.0  # この秒数以内に保存した位置があれば、そこから再開

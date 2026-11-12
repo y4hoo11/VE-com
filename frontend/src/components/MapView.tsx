@@ -1,16 +1,23 @@
 // 地図（SVG）。車両・経路・地点を描き、地図の操作モード（移動先・現在地の指定）も受け持つ
 // ズーム：ホイール（カーソルの位置を中心に）か右下のボタン。拡大中は何もない所をドラッグして動かす
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
-import { COL, MAP_H, MAP_W, OFFICE, PAUSED_COL, SHELVES, WAYPOINTS, ZONES, wpByName, type Pt } from '../store/data';
+import { COL, PAUSED_COL, WAYPOINTS, wpByName, type Pt } from '../store/data';
+import { MAP, MAP_IMAGE } from '../store/map';
 import { askGoto, cancelMapMode, closePop, mapModeClick, nearestWp, setMapCursor, togglePop, useStore, veh } from '../store/store';
 import { cx } from './uiUtils';
 
-const X = (x: number) => x * 100;
-const Y = (y: number) => (MAP_H - y) * 100;
+// 地図の座標 [m]（Nav2 の map 座標。左下が origin）→ SVG の座標（1m = 100、上が 0）
+const W = MAP.width * 100;
+const H = MAP.height * 100;
+const X = (x: number) => (x - MAP.originX) * 100;
+const Y = (y: number) => (MAP.originY + MAP.height - y) * 100;
+// 方眼（1m ごと）を引く位置
+const GRID_X = Array.from({ length: Math.floor(MAP.width) + 1 }, (_, i) => Math.ceil(MAP.originX) + i).filter((k) => k > MAP.originX && k < MAP.originX + MAP.width);
+const GRID_Y = Array.from({ length: Math.floor(MAP.height) + 1 }, (_, i) => Math.ceil(MAP.originY) + i).filter((k) => k > MAP.originY && k < MAP.originY + MAP.height);
 
 // 表示範囲（SVG の viewBox）。FULL が全体表示
 type View = { x: number; y: number; w: number; h: number };
-const FULL: View = { x: -40, y: -40, w: MAP_W * 100 + 80, h: MAP_H * 100 + 80 };
+const FULL: View = { x: -40, y: -40, w: W + 80, h: H + 80 };
 const MAX_ZOOM = 8;
 const STEP = 1.25;
 
@@ -76,7 +83,7 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
     p.x = e.clientX;
     p.y = e.clientY;
     const q = p.matrixTransform(svg.getScreenCTM()!.inverse());
-    return { x: q.x / 100, y: MAP_H - q.y / 100 };
+    return { x: MAP.originX + q.x / 100, y: MAP.originY + MAP.height - q.y / 100 };
   };
 
   const onDown = (e: PointerEvent) => {
@@ -132,35 +139,20 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
         </defs>
 
         {/* 床・方眼 */}
-        <rect x={0} y={0} width={MAP_W * 100} height={MAP_H * 100} className="fill-slate-50 dark:fill-slate-950" />
+        <rect x={0} y={0} width={W} height={H} className="fill-slate-50 dark:fill-slate-950" />
+        {/* ROS の地図（壁・棚 = 濃い色、未知 = 薄い色） */}
+        {MAP_IMAGE && <image href={MAP_IMAGE} x={0} y={0} width={W} height={H} preserveAspectRatio="none" style={{ imageRendering: 'pixelated' }} className="dark:invert-[0.15]" />}
         {s.view.grid && (
           <g className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={1.5}>
-            {Array.from({ length: MAP_W - 1 }, (_, i) => (
-              <line key={'v' + i} x1={(i + 1) * 100} y1={0} x2={(i + 1) * 100} y2={MAP_H * 100} />
+            {GRID_X.map((k) => (
+              <line key={'v' + k} x1={X(k)} y1={0} x2={X(k)} y2={H} />
             ))}
-            {Array.from({ length: MAP_H - 1 }, (_, i) => (
-              <line key={'h' + i} x1={0} y1={(i + 1) * 100} x2={MAP_W * 100} y2={(i + 1) * 100} />
+            {GRID_Y.map((k) => (
+              <line key={'h' + k} x1={0} y1={Y(k)} x2={W} y2={Y(k)} />
             ))}
           </g>
         )}
-
-        {/* 区画・棚・事務所・外壁 */}
-        {ZONES.map((z) => (
-          <g key={z.label}>
-            <rect x={X(z.x)} y={Y(z.y + z.h)} width={z.w * 100} height={z.h * 100} rx={10} className="fill-blue-50 stroke-blue-200 dark:fill-blue-950/40 dark:stroke-blue-900" strokeWidth={3} strokeDasharray="10 8" />
-            <text x={X(z.x) + 14} y={Y(z.y + z.h) + 34} className="fill-blue-300 dark:fill-blue-800" fontSize={26} fontWeight={700}>
-              {z.label}
-            </text>
-          </g>
-        ))}
-        {SHELVES.map(([x, y, w, h], i) => (
-          <rect key={i} x={X(x)} y={Y(y + h)} width={w * 100} height={h * 100} rx={4} className="fill-slate-300 stroke-slate-400 dark:fill-slate-700 dark:stroke-slate-600" strokeWidth={3} />
-        ))}
-        <rect x={X(OFFICE[0])} y={Y(OFFICE[1] + OFFICE[3])} width={OFFICE[2] * 100} height={OFFICE[3] * 100} className="fill-slate-200 stroke-slate-500 dark:fill-slate-800" strokeWidth={6} />
-        <text x={X(OFFICE[0] + OFFICE[2] / 2)} y={Y(OFFICE[1] + OFFICE[3] / 2) + 10} textAnchor="middle" fontSize={28} className="fill-slate-500">
-          事務所（立入不可）
-        </text>
-        <rect x={0} y={0} width={MAP_W * 100} height={MAP_H * 100} fill="none" className="stroke-slate-700 dark:stroke-slate-400" strokeWidth={14} />
+        <rect x={0} y={0} width={W} height={H} fill="none" className="stroke-slate-400 dark:stroke-slate-600" strokeWidth={4} />
 
         {/* 地点 */}
         {WAYPOINTS.map((w) => {

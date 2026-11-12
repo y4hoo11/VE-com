@@ -3,6 +3,22 @@ import { socketService } from './socketService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
 import type { VehicleTelemetryExtra } from '../types';
+import { taskProgressService } from './taskProgressService';
+
+// 受信するトピック（docs/agv_protocol.md 2-2〜2-6）
+const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online'];
+
+// agv/{id}/path の points（[[x,y],...]）を画面の形にする。おかしな値は捨てる
+function readPath(m: Record<string, unknown>) {
+  const points = Array.isArray(m.points)
+    ? m.points
+        .filter((p): p is [number, number] => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+        .map(([x, y]) => ({ x, y }))
+    : [];
+  const g = m.goal as { x?: unknown; y?: unknown } | undefined;
+  const goal = g && typeof g.x === 'number' && typeof g.y === 'number' ? { x: g.x, y: g.y } : null;
+  return { points, goal };
+}
 
 // telemetry の追加項目のうち、画面にそのまま流すもの（型が合うものだけ通す）
 const NUM_KEYS = ['speed', 'locQuality', 'piTemp', 'lidarHz', 'vbat'] as const;
@@ -13,15 +29,16 @@ function pickTelemetryExtra(m: Record<string, unknown>): VehicleTelemetryExtra |
   for (const k of NUM_KEYS) if (typeof m[k] === 'number') out[k] = m[k];
   for (const k of STR_KEYS) if (typeof m[k] === 'string') out[k] = m[k];
   if (typeof m.esp32 === 'boolean') out.esp32 = m.esp32;
+  if (typeof m.paused === 'boolean') out.paused = m.paused;
   return Object.keys(out).length ? (out as VehicleTelemetryExtra) : undefined;
 }
 
 class MqttService {
   init() {
     const subscribeTopics = () => {
-      mqttClient.subscribe(['agv/+/telemetry', 'agv/+/emergency'], undefined, (err: Error | null) => {
+      mqttClient.subscribe(TOPICS, undefined, (err: Error | null) => {
         if (!err) {
-          console.log('[MQTT] 購読開始: agv/+/telemetry, agv/+/emergency');
+          console.log(`[MQTT] 購読開始: ${TOPICS.join(', ')}`);
         } else {
           console.error('[MQTT] 購読エラー:', err);
         }
@@ -103,10 +120,15 @@ class MqttService {
           const reason = message.reason || '障害物接近による緊急制動';
           console.error(`[MQTT緊急検知] ${agvId}: ${reason}`);
 
-          await prisma.vehicle.update({
+          // まだ DB に無い車両（telemetry より先に emergency が届いた）は記録できないので飛ばす
+          const r = await prisma.vehicle.updateMany({
             where: { id: agvId },
             data: { status: VehicleStatus.ERROR },
           });
+          if (r.count === 0) {
+            console.warn(`[MQTT緊急検知] 未登録の車両 ${agvId} からの緊急停止のため、記録しませんでした`);
+            return;
+          }
 
           const createdLog = await prisma.vehicleLog.create({
             data: {
@@ -133,6 +155,24 @@ class MqttService {
             details: message,
             timestamp: createdLog.timestamp.toISOString(),
           });
+        } else if (topic.endsWith('/task')) {
+          // タスクの進捗（docs/agv_protocol.md 2-4）
+          await taskProgressService.handle(agvId, message);
+        } else if (topic.endsWith('/path')) {
+          // Nav2 が計画した経路（2-5）。DB には保存せず、画面に流すだけ
+          socketService.broadcastVehiclePath({ id: agvId, ...readPath(message) });
+        } else if (topic.endsWith('/online')) {
+          // PC1 の接続状態（2-6）。切れたとき（遺言）は、5秒待たずにすぐオフラインにする。
+          // つながったときは何もしない（telemetry が届いた時点でオンラインに戻る）
+          if (message.online !== false) return;
+          const r = await prisma.vehicle.updateMany({
+            where: { id: agvId, status: { notIn: [VehicleStatus.OFFLINE, VehicleStatus.ERROR] } },
+            data: { status: VehicleStatus.OFFLINE },
+          });
+          if (r.count > 0) {
+            socketService.broadcastVehicleUpdate({ id: agvId, status: VehicleStatus.OFFLINE });
+            await socketService.recordLog(agvId, LogLevel.WARN, 'PC1 との接続が切れたため、オフラインにしました');
+          }
         }
       } catch (e) {
         console.error('MQTTメッセージの処理エラー:', e);

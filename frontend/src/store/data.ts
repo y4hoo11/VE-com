@@ -112,57 +112,9 @@ export interface User {
 }
 
 // ---------------------------------------------------------------
-// 地図（モック用の簡略図。16m x 10m、左下が (0,0)）
-// 地点名は edge_ai/.../waypoints.yaml と同じ。座標はこの簡略図用に置き直している
+// 地図・地点は map.ts（ROS 側の地図と waypoints.yaml を読み込む）。ここからも使えるように出しておく
 // ---------------------------------------------------------------
-export const MAP_W = 16;
-export const MAP_H = 10;
-export const AISLE_Y = 5; // 横の通路
-
-export const WAYPOINTS: Waypoint[] = [
-  { name: 'Home', label: '待機・充電', x: 1.5, y: 5, aliases: ['home', '充電ステーション'], charger: true },
-  { name: 'Dock-A', label: '入荷口A', x: 1.5, y: 8.5, aliases: ['DockA', '入荷口A'] },
-  { name: 'Dock-B', label: '入荷口B', x: 1.5, y: 1.5, aliases: ['DockB', '入荷口B'] },
-  { name: 'A13', label: '棚A13', x: 6, y: 5, aliases: ['棚A13'] },
-  { name: 'Station-1', label: '作業場1', x: 8, y: 8.5, aliases: ['Station1', '1', '部屋'] },
-  { name: 'Station-2', label: '作業場2', x: 8, y: 1.5, aliases: ['Station2', '2'] },
-  { name: 'Station-3', label: '作業場3', x: 14.5, y: 5, aliases: ['Station3', '3'] },
-];
-
-// [x, y, 幅, 高さ]（左下基準, m）
-export const SHELVES: [number, number, number, number][] = [
-  [4.8, 6.2, 2.4, 1.2],
-  [8.8, 6.2, 2.4, 1.2],
-  [4.8, 2.6, 2.4, 1.2],
-  [8.8, 2.6, 2.4, 1.2],
-  [12.8, 6.4, 1, 2.8],
-];
-export const OFFICE: [number, number, number, number] = [12.2, 0, 3.8, 2.6];
-export const ZONES = [
-  { x: 0.2, y: 7.3, w: 2.6, h: 2.5, label: '入荷口A' },
-  { x: 0.2, y: 0.2, w: 2.6, h: 2.5, label: '入荷口B' },
-  { x: 0.2, y: 4.2, w: 2.6, h: 1.6, label: '充電' },
-];
-
-// 地点名か別名で探す（ROS の waypoints.yaml と同じく、別名でも指定できる）
-export const wpByName = (n: string | null | undefined) =>
-  n ? WAYPOINTS.find((w) => w.name === n || w.aliases.includes(n)) : undefined;
-
-// 走れる場所か（壁ぎわ・棚・事務所は不可）
-export function isFree(p: Pt): boolean {
-  const m = 0.3;
-  if (p.x < m || p.y < m || p.x > MAP_W - m || p.y > MAP_H - m) return false;
-  return ![...SHELVES, OFFICE].some(([x, y, w, h]) => p.x > x - m && p.x < x + w + m && p.y > y - m && p.y < y + h + m);
-}
-
-// 簡易な経路（通路 y=5 を経由する）。本物は Nav2 が計画する
-export function makeRoute(from: Pt, to: Pt): Pt[] {
-  const p: Pt[] = [{ x: from.x, y: from.y }];
-  if (Math.abs(from.y - AISLE_Y) > 0.05) p.push({ x: from.x, y: AISLE_Y });
-  if (Math.abs(from.x - to.x) > 0.05) p.push({ x: to.x, y: AISLE_Y });
-  if (Math.abs(to.y - AISLE_Y) > 0.05 || p.length === 1) p.push({ x: to.x, y: to.y });
-  return p;
-}
+export { isFree, planRoute, WAYPOINTS, wpByName } from './map';
 
 export const pathLen = (pts: Pt[]) =>
   pts.slice(1).reduce((s, b, i) => s + Math.hypot(b.x - pts[i].x, b.y - pts[i].y), 0);

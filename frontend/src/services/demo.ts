@@ -3,7 +3,7 @@
 // データはメモリにあるだけで、再読み込みやデモの切り替えで最初に戻る。
 // 実機で確認できるようになったら、このファイルと【仮】の付いた呼び出しを消す。
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
-import { isFree, makeRoute, pathLen, wpByName, type Level, type Phase, type Pt, type TStatus, type VStatus } from '../store/data';
+import { isFree, pathLen, planRoute, wpByName, type Level, type Phase, type Pt, type TStatus, type VStatus } from '../store/data';
 
 const TICK_MS = 200;
 const SPEED = 0.8; // m/s（実機より速め。見ていて分かるように）
@@ -180,13 +180,16 @@ const normAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const taskOf = (v: DemoVehicle) => tasks.find((t) => t.id === v.taskId);
 const clampProgress = (n: number) => Math.round(Math.min(100, Math.max(0, n)));
 
+// 壁を避けた経路で走り出す。経路が見つからなければ、まっすぐ向かう（そのときは false）
 function startRoute(v: DemoVehicle, to: Pt, goal: string, phase: Phase | null) {
-  v.route = makeRoute(v, to);
+  const planned = planRoute(v, to);
+  v.route = planned ?? [{ x: v.x, y: v.y }, { x: to.x, y: to.y }];
   v.routeTotal = Math.max(pathLen(v.route), 0.01);
   v.goal = goal;
   v.phase = phase;
   v.wait = 0;
   v.status = 'RUNNING';
+  return !!planned;
 }
 
 function finishMove(v: DemoVehicle) {
@@ -325,7 +328,8 @@ function endManual(v: DemoVehicle, reason: string) {
 function driveManually(v: DemoVehicle, dt: number) {
   const m = v.manual!;
   if (Date.now() > m.until) return endManual(v, '画面からの指示が途切れた');
-  v.theta = normAngle(v.theta + m.angular * dt);
+  // TT-02 は車なので、前後に動いているときだけ曲がれる（その場では回れない）
+  if (m.linear !== 0) v.theta = normAngle(v.theta + m.angular * dt * Math.sign(m.linear));
   const next = { x: v.x + Math.cos(v.theta) * m.linear * dt, y: v.y + Math.sin(v.theta) * m.linear * dt };
   if (m.linear !== 0 && isFree(next)) {
     v.x = next.x;
@@ -410,7 +414,8 @@ export const demoCommand = {
     const v = need(id);
     const ng = whyNotMove(v);
     if (ng || !v) return ng;
-    if (!isFree(to)) return 'そこには移動できません（棚・壁・事務所の近く）';
+    if (!isFree(to)) return 'そこには移動できません（壁や棚の近く）';
+    if (!planRoute(v, to)) return 'そこまでの経路が見つかりません';
     v.mode = 'GOTO';
     v.paused = false;
     startRoute(v, to, goal, null);
@@ -439,6 +444,42 @@ export function demoAck(event: string, data: unknown): { ok: boolean; error?: st
   const id = (data as { vehicleId?: string } | null)?.vehicleId;
   const v = vehicles.find((x) => x.id === id);
   if (!v) return { ok: false, error: '車両が見つかりません' };
+  // 運行操作（実機では backend が docs/agv_protocol.md 2-1 の形で送るもの）
+  if (event === 'vehicle_command') {
+    const d = data as { type?: string; target?: string; x?: number; y?: number; theta?: number };
+    const at = (x: unknown, y: unknown) => (typeof x === 'number' && typeof y === 'number' ? { x, y } : null);
+    let err: string | null;
+    switch (d.type) {
+      case 'PAUSE':
+        err = demoCommand.pause(v.id);
+        break;
+      case 'RESUME':
+        err = demoCommand.resume(v.id);
+        break;
+      case 'CONFIRM':
+        err = demoCommand.confirmLoad(v.id);
+        break;
+      case 'RETURN_HOME': {
+        const home = wpByName('Home');
+        err = home ? demoCommand.goto(v.id, home, home.name) : 'ホーム（Home）の地点がありません';
+        break;
+      }
+      case 'GOTO': {
+        const w = wpByName(d.target);
+        const p = w ?? at(d.x, d.y);
+        err = p ? demoCommand.goto(v.id, p, w?.name ?? `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`) : '移動先が指定されていません';
+        break;
+      }
+      case 'SET_POSE': {
+        const p = at(d.x, d.y);
+        err = p && typeof d.theta === 'number' ? demoCommand.setPose(v.id, p, d.theta) : '現在地の指定が正しくありません';
+        break;
+      }
+      default:
+        err = '命令の種類が正しくありません';
+    }
+    return err ? { ok: false, error: err } : { ok: true };
+  }
   if (event === 'manual_drive') {
     const d = data as { linear?: number; angular?: number };
     const linear = Math.max(-0.3, Math.min(0.3, Number(d.linear) || 0));

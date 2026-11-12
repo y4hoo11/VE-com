@@ -1,9 +1,10 @@
 // src/services/socketService.ts
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { VehicleUpdatePayload, LogPayload, SystemStatusPayload } from '../types';
+import { VehicleUpdatePayload, LogPayload, SystemStatusPayload, TaskProgressPayload, VehiclePathPayload } from '../types';
 import { mqttService } from './mqttService';
 import { manualDriveService } from './manualDriveService';
+import { vehicleCommandService } from './vehicleCommandService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel, Role } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
@@ -26,6 +27,7 @@ class SocketService {
       cors: { origin: '*' },
     });
     manualDriveService.start((id, level, msg) => this.recordLog(id, level, msg));
+    vehicleCommandService.start((id, level, msg) => this.recordLog(id, level, msg));
 
     // 接続時にトークンを確認する（フロントは io(url, { auth: { token } }) で送る）。
     // 削除されたユーザーはつながらない（画面はログイン画面に戻る）
@@ -123,6 +125,17 @@ class SocketService {
         }
       });
 
+      // 運行操作（一時停止・再開、積み降ろし完了、地点へ移動、ホームへ戻る、現在地の設定）
+      // data: { vehicleId, type, target? | x?, y?, theta? }
+      socket.on('vehicle_command', async (data: unknown, ack?: Ack) => {
+        try {
+          ack?.(await vehicleCommandService.handle(user, data));
+        } catch (e) {
+          console.error('運行操作の処理エラー:', e);
+          ack?.({ ok: false, error: '命令を送れませんでした' });
+        }
+      });
+
       // 手動操縦（WASD）。押している間、画面から 0.2 秒ごとに速度が届く
       socket.on('manual_drive', async (data: unknown, ack?: Ack) => {
         try {
@@ -193,6 +206,20 @@ class SocketService {
   broadcastTasksChanged() {
     if (this.io) {
       this.io.emit('tasks:changed');
+    }
+  }
+
+  // タスクの進捗（PC1 の agv/{id}/task）を知らせる。進捗バー用で、届くたびに送る
+  broadcastTaskProgress(payload: TaskProgressPayload) {
+    if (this.io) {
+      this.io.emit('task:progress', payload);
+    }
+  }
+
+  // Nav2 が計画した経路（PC1 の agv/{id}/path）を知らせる
+  broadcastVehiclePath(payload: VehiclePathPayload) {
+    if (this.io) {
+      this.io.emit('vehicle:path', payload);
     }
   }
 

@@ -1,9 +1,10 @@
 // 地図・地点：地図と地点（waypoints.yaml）の確認。編集は将来
 import { useState } from 'react';
 import { WAYPOINTS } from '../store/data';
-import { toast, useStore } from '../store/store';
+import { MAP } from '../store/map';
+import { useStore } from '../store/store';
 import { MapView } from '../components/MapView';
-import { Btn, Card, inputCls, Kv, Tag } from '../components/ui';
+import { Btn, Card, Kv, Tag } from '../components/ui';
 import { cx } from '../components/uiUtils';
 
 export function MapPage() {
@@ -14,11 +15,7 @@ export function MapPage() {
       <Card
         title={
           <>
-            地図
-            <select className={cx(inputCls, 'w-56 font-normal')} defaultValue="warehouse_map" onChange={() => toast('地図の切り替えは未対応です（PC1 側の地図と合わせる仕組みが必要）', 'warn')}>
-              <option value="warehouse_map">warehouse_map（使用中）</option>
-              <option value="demo_map">demo_map</option>
-            </select>
+            地図 <span className="text-xs font-normal text-slate-500">{MAP.id}（ROS の agv_navigation/maps）</span>
           </>
         }
         bodyClass="relative"
@@ -29,13 +26,15 @@ export function MapPage() {
         <Card title="地図の情報" bodyClass="p-4">
           <Kv
             rows={[
-              ['ファイル', 'map/warehouse_map.yaml'],
-              ['大きさ', '16m × 10m（320 × 200 px）'],
-              ['解像度', '0.05 m/px'],
-              ['原点', '(-5.0, -5.0)'],
+              ['ファイル', `agv_navigation/maps/${MAP.id}.yaml`],
+              ['大きさ', `${MAP.width.toFixed(1)}m × ${MAP.height.toFixed(1)}m（${MAP.cols} × ${MAP.rows} px）`],
+              ['解像度', `${MAP.resolution} m/px`],
+              ['原点', `(${MAP.originX.toFixed(1)}, ${MAP.originY.toFixed(1)})`],
             ]}
           />
-          <div className="mt-2 text-xs text-slate-400">※ いまは簡略図を表示しています。ROS 側と地図を合わせたら、PGM 画像を描く形に切り替えます。</div>
+          <div className="mt-2 text-xs text-slate-400">
+            ※ ROS 側の地図と waypoints.yaml をそのまま表示しています（Web からは書き換えません）。地図を変えるときは frontend/src/store/map.ts の読み込み先を、PC1 の mission.yaml の map_id と合わせてください。
+          </div>
         </Card>
         <Card
           title={

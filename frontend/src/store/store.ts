@@ -1,16 +1,17 @@
 // 画面全体の状態と操作。
 // データはバックエンド（REST API と Socket.IO）から取り、画面はここを通して読み書きする。
-// まだバックエンドに無い操作（一時停止・移動の指示・ユーザー登録など）は NOT_SUPPORTED で止める。
+// まだできない操作（地図の切り替えなど）は NOT_SUPPORTED で止める。
 // 運行の設定（バッテリーのしきい値）はサーバーに保存し、全端末で共有する。
 import { useSyncExternalStore } from 'react';
 import { isAxiosError } from 'axios';
 import { api } from '../services/api';
 import { emitWithAck, socket } from '../services/socket';
-import { demoCommand, demoOn, resetDemo, setDemoEnabled } from '../services/demo'; // 【仮】デモモード
+import { demoOn, resetDemo, setDemoEnabled } from '../services/demo'; // 【仮】デモモード
 import {
   ERR,
   isFree,
   LATCHED,
+  pathLen,
   wpByName,
   WAYPOINTS,
   type Hist,
@@ -117,6 +118,7 @@ interface VehicleUpdate {
     vbat?: number;
     phase?: string;
     goal?: string;
+    paused?: boolean; // ROS 側に追加をお願いしている項目
   };
   // 【仮】デモモードのときだけ届く（実機の telemetry には無い項目）
   demo?: { paused: boolean; route: Pt[]; routeTotal: number; mode: Vehicle['mode']; wait: number; progress: number | null };
@@ -507,6 +509,7 @@ function listen() {
       if (tm.vbat !== undefined) v.vbat = tm.vbat;
       if (tm.phase !== undefined) v.phase = (['TO_START', 'LOADING', 'TO_TARGET', 'UNLOADING'].includes(tm.phase) ? tm.phase : null) as Phase | null;
       if (tm.goal !== undefined) v.goal = tm.goal || null;
+      if (tm.paused !== undefined) v.paused = tm.paused;
     }
     if (u.status !== undefined) {
       if (u.status === 'ERROR' && (v.status !== 'ERROR' || u.emergencyReason)) {
@@ -528,7 +531,12 @@ function listen() {
       v.wait = u.demo.wait;
       const t = task(v.taskId);
       if (t && u.demo.progress != null) t.progress = u.demo.progress;
+    } else if (tm && !v.taskId) {
+      // 実機：タスクでない移動（地点へ移動・ホームへ戻る）は「走っていて行き先がある」で判断する
+      v.mode = v.status === 'RUNNING' && v.goal ? 'GOTO' : 'IDLE';
     }
+    // 止まったら、前の経路は消す（次の経路は agv/{id}/path で届く）
+    if (!u.demo && u.status !== undefined && v.status !== 'RUNNING') v.route = [];
     v.lastHb = now();
     emit();
   });
@@ -564,6 +572,24 @@ function listen() {
   });
 
   // 運行の設定の変更（ほかの端末で保存されたとき）
+  // タスクの進捗（PC1 の agv/{id}/task。進捗バーと「いま何をしているか」）
+  on('task:progress', (p: { taskId: string; vehicleId: string; phase: string | null; progress: number | null }) => {
+    const t = task(p.taskId);
+    if (t && p.progress != null) t.progress = p.progress;
+    const v = veh(p.vehicleId);
+    if (v && p.phase) v.phase = p.phase as Phase;
+    emit();
+  });
+
+  // Nav2 が計画した経路（PC1 の agv/{id}/path）。今の位置から経路をつなげて描く
+  on('vehicle:path', (p: { id: string; points: Pt[] }) => {
+    const v = veh(p.id);
+    if (!v) return;
+    v.route = p.points.length ? [{ x: v.x, y: v.y }, ...p.points] : [];
+    v.routeTotal = Math.max(pathLen(v.route), 0.01);
+    emit();
+  });
+
   on('settings:changed', (st: { ops?: OpsSettings }) => {
     applyOps(st?.ops);
     emit();
@@ -602,12 +628,6 @@ export function restartDemo() {
   emit();
   reloadAll();
   toast('デモを最初に戻しました', 'ok');
-}
-
-// デモの命令の結果を画面に伝える（問題があれば理由を出す）
-function demoResult(error: string | null, okMsg?: string) {
-  if (error) toast(error, 'warn');
-  else if (okMsg) toast(okMsg, 'ok');
 }
 
 // ---------------------------------------------------------------
@@ -733,27 +753,24 @@ export async function clearEmergency(id: string) {
 }
 
 // ---------------------------------------------------------------
-// 運行操作（バックエンドに命令APIが無いので未対応。【仮】デモ中だけ動く）
+// 運行操作 — Socket.IO の vehicle_command（サーバーが docs/agv_protocol.md 2-1 の形で車両に送る）。
+// 【仮】デモ中は、同じ命令をデモ（services/demo.ts）が受け取る
 // ---------------------------------------------------------------
-export function pause(id: string) {
-  if (!S.demo) return notSupported();
-  demoResult(demoCommand.pause(id));
+type CommandType = 'PAUSE' | 'RESUME' | 'CONFIRM' | 'GOTO' | 'RETURN_HOME' | 'SET_POSE';
+async function sendCommand(vehicleId: string, type: CommandType, extra: Record<string, unknown> = {}, okMsg?: string) {
+  const res = await emitWithAck('vehicle_command', { vehicleId, type, ...extra });
+  if (!res.ok) toast(`${veh(vehicleId)?.name ?? vehicleId}: ${res.error}`, 'error');
+  else if (okMsg) toast(okMsg, 'ok');
+  return res.ok;
 }
-export function resume(id: string) {
-  if (!S.demo) return notSupported();
-  demoResult(demoCommand.resume(id));
-}
-export function confirmLoad(id: string) {
-  if (!S.demo) return notSupported();
-  demoResult(demoCommand.confirmLoad(id));
-}
-export function askHome(id: string) {
-  if (!S.demo) return notSupported();
-  const home = wpByName('Home')!;
-  demoResult(demoCommand.goto(id, home, home.name), `${veh(id)?.name ?? id} をホームへ戻します`);
-}
+const vname = (id: string) => veh(id)?.name ?? id;
+
+export const pause = (id: string) => sendCommand(id, 'PAUSE', {}, `${vname(id)} に一時停止を送りました`);
+export const resume = (id: string) => sendCommand(id, 'RESUME', {}, `${vname(id)} に再開を送りました`);
+export const confirmLoad = (id: string) => sendCommand(id, 'CONFIRM', {}, `${vname(id)} に積み降ろし完了を送りました`);
+export const askHome = (id: string) => sendCommand(id, 'RETURN_HOME', {}, `${vname(id)} をホームへ戻します`);
+
 export function startMapMode(type: 'goto' | 'pose', vid: string) {
-  if (!S.demo) return notSupported();
   S.mapMode = { type, vid };
   S.drawer = null;
   // 地図のない画面や、車両の詳細以外から押されたら、運行モニターの地図で指定する
@@ -782,31 +799,33 @@ export function nearestWp(p: Pt, within = 0.7) {
   });
   return best;
 }
+// 地点へ移動。地点なら名前で、地図の任意の場所なら座標で送る（どちらも仕様書の GOTO にある）
 export function askGoto(vid: string, target: { name?: string; label?: string; x: number; y: number }) {
   S.mapMode = null;
-  if (!S.demo) return notSupported();
-  const goal = target.name ?? `(${target.x.toFixed(1)}, ${target.y.toFixed(1)})`;
-  demoResult(demoCommand.goto(vid, { x: target.x, y: target.y }, goal), `${veh(vid)?.name ?? vid} を ${goal} へ移動します`);
   emit();
+  if (!target.name && !isFree(target)) return toast('そこには移動できません（壁や棚の近く）', 'warn');
+  const goal = target.name ?? `(${target.x.toFixed(2)}, ${target.y.toFixed(2)})`;
+  const extra = target.name ? { target: target.name } : { x: round2(target.x), y: round2(target.y) };
+  return sendCommand(vid, 'GOTO', extra, `${vname(vid)} を ${goal} へ移動します`);
 }
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 export function mapModeClick(p: Pt) {
   const mm = S.mapMode;
-  if (!S.demo || !mm) {
-    S.mapMode = null;
-    return notSupported();
-  }
+  if (!mm) return;
   if (mm.type === 'goto') return askGoto(mm.vid, nearestWp(p) ?? p);
   // 現在地の設定：1回目で場所、2回目で向き
   if (!mm.p) {
-    if (!isFree(p)) return toast('そこには置けません（棚・壁・事務所の近く）', 'warn');
+    if (!isFree(p)) return toast('そこには置けません（壁や棚の近く）', 'warn');
     mm.p = p;
     emit();
     return;
   }
-  const theta = Math.atan2(p.y - mm.p.y, p.x - mm.p.x);
+  const at = mm.p;
+  const theta = Math.atan2(p.y - at.y, p.x - at.x);
   S.mapMode = null;
-  demoResult(demoCommand.setPose(mm.vid, mm.p, theta), '現在地を設定しました');
   emit();
+  return sendCommand(mm.vid, 'SET_POSE', { x: round2(at.x), y: round2(at.y), theta: round2(theta) }, `${vname(mm.vid)} の現在地を設定しました`);
 }
 
 // ---------------------------------------------------------------

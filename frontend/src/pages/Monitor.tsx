@@ -1,6 +1,7 @@
 // 運行モニター（ホーム）：地図＋車両一覧＋最新のログ。普段開いておく画面
 import { Link } from 'react-router-dom';
 import { COL, PHASE, TS } from '../store/data';
+import { MAP } from '../store/map';
 import { emit, estop, openLog, openVehicle, S, savePrefs, task, useStore } from '../store/store';
 import { MapView } from '../components/MapView';
 import { Bar, Battery, Btn, Card, LvChip, VChip } from '../components/ui';
@@ -28,7 +29,10 @@ export function Monitor() {
       <Card
         title={
           <>
-            倉庫マップ<span className="text-xs font-normal text-slate-500">簡略図 ・ 16m × 10m</span>
+            倉庫マップ
+            <span className="text-xs font-normal text-slate-500">
+              {MAP.id} ・ {MAP.width.toFixed(0)}m × {MAP.height.toFixed(0)}m
+            </span>
           </>
         }
         right={
