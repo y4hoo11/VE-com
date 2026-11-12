@@ -264,9 +264,9 @@ export function valueError(item: SettingItem, raw: string, cur: string): string 
 export const needApprovals = (rank: number) => (rank >= 3 ? 2 : 1);
 
 export const RANKS = {
-  1: { short: 'L1', badge: '危険度 L1（低）', tone: 'green', cls: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300', sub: '変更したい項目を選び、理由を添えて申請します。', approvers: 1, need: '最高権限者 1 人', step: '最高権限者 1 人', when: 'すぐに反映', reflect: '承認されると、すぐに設定へ反映されます。' },
-  2: { short: 'L2', badge: '危険度 L2（中）', tone: 'amber', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300', sub: '変更したい項目を選び、理由と効果を添えて申請します。', approvers: 1, need: '最高権限者 1 人', step: '最高権限者 1 人', when: '次の待機時', reflect: '走行中の車両には、次の待機時に反映されます。' },
-  3: { short: 'L3', badge: '危険度 L3（高）', tone: 'red', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300', sub: '理由・効果・安全ルール案を添えて、誓約のうえ申請します。', approvers: 2, need: '申請者以外の最高権限者 2 人', step: '最高権限者 2 人', when: '停止中のみ', reflect: '対象の車両が停止中のときだけ反映されます。SHRAGD にも通知されます。' },
+  1: { short: 'L1', name: '低', desc: '安全に関係せず、すぐ元に戻せる。全車両に影響しても、見え方や通知の範囲にとどまる', badge: '危険度 L1（低）', tone: 'green', cls: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300', sub: '変更したい項目を選び、理由を添えて申請します。', approvers: 1, need: '最高権限者 1 人', step: '最高権限者 1 人', when: 'すぐに反映', reflect: '承認されると、すぐに設定へ反映されます。' },
+  2: { short: 'L2', name: '中', desc: '車両の動きに間接的に影響する。誤ると効率が落ちたり車両が止まったりするが、衝突などの危険は直接ない', badge: '危険度 L2（中）', tone: 'amber', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300', sub: '変更したい項目を選び、理由と効果を添えて申請します。', approvers: 1, need: '最高権限者 1 人', step: '最高権限者 1 人', when: '次の待機時', reflect: '走行中の車両には、次の待機時に反映されます。' },
+  3: { short: 'L3', name: '高', desc: '車両の動きや安全に直結する。誤ると衝突・接触や、人への危険につながる', badge: '危険度 L3（高）', tone: 'red', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300', sub: '理由・効果・安全ルール案を添えて、誓約のうえ申請します。', approvers: 2, need: '申請者以外の最高権限者 2 人', step: '最高権限者 2 人', when: '停止中のみ', reflect: '対象の車両が停止中のときだけ反映されます。SHRAGD にも通知されます。' },
 } as const;
 
 export type ReqStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | 'APPLIED';

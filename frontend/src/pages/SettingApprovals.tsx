@@ -6,7 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { approvalsOf, fmtSetting, isOpenReq, needApprovals, RANKS, SETTING_ITEMS, settingItem, valueError, type ChangeRequest, type SettingItem } from '../store/data';
 import { applyRequest, demoApproveAs, directChange, nav, reviewRequest, useStore } from '../store/store';
-import { Btn, Card, cx, fmtDT, FormRow, inputCls, PersonIcon, RankBadge, ReqChip, Tag, ValueInput } from '../components/ui';
+import { Btn, Card, cx, fmtDT, FormRow, inputCls, PersonIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput } from '../components/ui';
 
 const LIST = '/settings/approvals';
 const openFor = (reqs: ChangeRequest[], key: string) => reqs.find((r) => r.key === key && isOpenReq(r));
@@ -162,6 +162,7 @@ function ApprovalList() {
           </table>
         )}
       </Card>
+      <RankLegend />
     </div>
   );
 }
@@ -279,6 +280,9 @@ function ReviewView({ r, item }: { r: ChangeRequest; item: SettingItem }) {
         </div>
       </Card>
       <SidePanel r={r} rank={r.rank} />
+      <div className="col-span-2">
+        <RankLegend />
+      </div>
     </div>
   );
 }
@@ -377,6 +381,9 @@ function ChangeView({ item, req }: { item: SettingItem; req?: ChangeRequest }) {
         </div>
       </Card>
       <SidePanel r={req} rank={item.rank} direct={!req} />
+      <div className="col-span-2">
+        <RankLegend />
+      </div>
     </div>
   );
 }

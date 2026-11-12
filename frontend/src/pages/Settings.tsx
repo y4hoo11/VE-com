@@ -2,8 +2,8 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { approvalsOf, fmtSetting, isOpenReq, needApprovals, RANKS, REQ_STATUS, SETTING_ITEMS, settingItem, ST, valueError, type ChangeRequest, type Rank, type SettingItem } from '../store/data';
-import { askDeleteUser, askDeleteVehicle, emit, nav, openModal, playAlarm, reqNotes, restartDemo, savePrefs, setDemoMode, setTestOnline, submitChangeRequest, toast, useStore, withdrawRequest } from '../store/store';
-import { Btn, Card, cx, fmtDT, fmtT, FormRow, inputCls, Kv, LockIcon, RankBadge, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
+import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, reqNotes, restartDemo, savePrefs, setDemoMode, setTestOnline, submitChangeRequest, toast, useStore, withdrawRequest } from '../store/store';
+import { Btn, Card, cx, fmtDT, fmtT, FormRow, inputCls, Kv, LockIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
 import { SettingApprovals } from './SettingApprovals';
 
 // 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める
@@ -15,7 +15,6 @@ const MENU: [string, string, boolean][] = [
   ['values', '現在の設定値', false],
   ['request', '変更申請', false],
   ['approvals', '申請の承認', true],
-  ['ops', '運行', true],
   ['vehicles', '車両', true],
   ['users', 'ユーザー', true],
   ['system', 'システム情報', false],
@@ -49,7 +48,7 @@ export function Settings() {
             🔒 この設定は管理者（ADMIN）だけが見られます。
           </Card>
         ) : (
-          { display: <Display />, account: <Account />, values: <CurrentValues />, request: <ChangeRequest />, approvals: <SettingApprovals />, ops: <Ops />, vehicles: <Vehicles />, users: <Users />, system: <System />, demo: <Demo /> }[item[0]]
+          { display: <Display />, account: <Account />, values: <CurrentValues />, request: <ChangeRequest />, approvals: <SettingApprovals />, vehicles: <Vehicles />, users: <Users />, system: <System />, demo: <Demo /> }[item[0]]
         )}
       </div>
     </div>
@@ -184,46 +183,49 @@ function Demo() {
 function CurrentValues() {
   const s = useStore();
   return (
-    <Card title={<>現在の設定値 <span className="text-xs font-normal text-slate-500">見るだけの一覧です。変更は「変更申請」から行います</span></>}>
-      <table className="w-full text-sm">
-        <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
-          <tr>
-            <th className="px-4 py-2">項目</th>
-            <th className="py-2">ランク</th>
-            <th className="py-2">現在の値</th>
-            <th className="py-2">初期値</th>
-            <th className="py-2 pr-4">影響</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SETTING_ITEMS.map((i) => {
-            const v = s.values[i.key];
-            const changed = v !== i.def;
-            return (
-              <tr key={i.key} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
-                <td className="px-4 py-2.5 font-medium">{i.label}</td>
-                <td className="py-2.5">
-                  <Tag tone={RANKS[i.rank].tone}>{RANKS[i.rank].short}</Tag>
-                </td>
-                <td className="py-2.5">
-                  <b>{fmtSetting(i.key, v)}</b>
-                  {changed && (
-                    <span className="ml-2">
-                      <Tag tone="blue">変更あり</Tag>
-                    </span>
-                  )}
-                </td>
-                <td className="py-2.5 text-slate-500">{fmtSetting(i.key, i.def)}</td>
-                <td className="py-2.5 pr-4 text-slate-500">{i.scope}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-800">
-        最高速度・障害物の距離などの車両側の値は、変更しても車両へ送る仕組みがまだありません（記録と表示だけが変わります）。
-      </div>
-    </Card>
+    <div className="space-y-3">
+      <Card title={<>現在の設定値 <span className="text-xs font-normal text-slate-500">見るだけの一覧です。変更は「変更申請」から行います</span></>}>
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
+            <tr>
+              <th className="px-4 py-2">項目</th>
+              <th className="py-2">ランク</th>
+              <th className="py-2">現在の値</th>
+              <th className="py-2">初期値</th>
+              <th className="py-2 pr-4">影響</th>
+            </tr>
+          </thead>
+          <tbody>
+            {SETTING_ITEMS.map((i) => {
+              const v = s.values[i.key];
+              const changed = v !== i.def;
+              return (
+                <tr key={i.key} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
+                  <td className="px-4 py-2.5 font-medium">{i.label}</td>
+                  <td className="py-2.5">
+                    <Tag tone={RANKS[i.rank].tone}>{RANKS[i.rank].short}</Tag>
+                  </td>
+                  <td className="py-2.5">
+                    <b>{fmtSetting(i.key, v)}</b>
+                    {changed && (
+                      <span className="ml-2">
+                        <Tag tone="blue">変更あり</Tag>
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-2.5 text-slate-500">{fmtSetting(i.key, i.def)}</td>
+                  <td className="py-2.5 pr-4 text-slate-500">{i.scope}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-800">
+          最高速度・障害物の距離などの車両側の値は、変更しても車両へ送る仕組みがまだありません（記録と表示だけが変わります）。
+        </div>
+      </Card>
+      <RankLegend />
+    </div>
   );
 }
 
@@ -244,49 +246,6 @@ function Account() {
       <Btn disabled={s.demo} title={s.demo ? DEMO_NA : undefined} onClick={() => openModal({ kind: 'password' })}>
         パスワードを変更…
       </Btn>
-    </Card>
-  );
-}
-
-function Ops() {
-  const s = useStore();
-  // L2 の2項目は、管理者なら申請なしで変えられる（変更画面でサインし、記録を残す）
-  const batt = (key: 'battWarn' | 'battMin', label: string, hint: string) => (
-    <Row label={label} hint={hint}>
-      <div className="flex items-center gap-2">
-        <input disabled className={cx(inputCls, 'w-24!')} value={s.values[key]} /> %<Tag tone={RANKS[2].tone}>{RANKS[2].short}</Tag>
-        <Btn size="sm" onClick={() => nav(`/settings/approvals/direct-${key}`)}>
-          変更する…
-        </Btn>
-      </div>
-    </Row>
-  );
-  const l3 = (key: 'maxSpeed' | 'obstacle', label: string, hint: string) => (
-    <Row label={label} hint={hint}>
-      <div className="flex items-center gap-2">
-        <input disabled className={cx(inputCls, 'w-24!')} value={s.values[key]} /> {key === 'maxSpeed' ? 'km/h' : 'm'}
-        <Tag tone={RANKS[3].tone}>{RANKS[3].short}</Tag>
-        <Btn size="sm" onClick={() => nav('/settings/request')}>
-          変更を申請…
-        </Btn>
-      </div>
-    </Row>
-  );
-  return (
-    <Card title={<>運行 <span className="text-xs font-normal text-slate-500">変更にはサインが必要です。だれが変更したかは「申請の承認」の変更の記録に残ります</span></>} bodyClass="px-5">
-      {batt('battWarn', 'バッテリー：警告する残量', 'これより少ないと黄色で表示')}
-      {batt('battMin', 'バッテリー：割り当てない残量', 'これより少ない車両はタスクの候補から外し、赤で表示')}
-      <div className="my-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-        最高速度と障害物で止まる距離は、変更しても車両（PC1 の nav2_params.yaml、ラズパイの serial_bridge）へ送る仕組みがまだありません。記録と表示だけが変わります。
-        車両へ送るには、先に docs/agv_protocol.md に命令を追加する必要があります。L3 のため、管理者でも申請と 2 人の承認が必要です。
-      </div>
-      {l3('maxSpeed', '最高速度', 'desired_linear_vel（車両側は m/s。5 km/h ≒ 1.39 m/s）')}
-      {l3('obstacle', '障害物で止まる距離', 'ラズパイの serial_bridge')}
-      <Row label="荷積み・荷降ろしの完了" hint="wait_mode">
-        <div className="flex items-center gap-2 text-sm">
-          時間で自動／「積み降ろし完了」ボタンで早められる（ボタンは未対応） <Tag>表示のみ</Tag>
-        </div>
-      </Row>
     </Card>
   );
 }
@@ -520,6 +479,9 @@ function ChangeRequest() {
         <MyRequests />
       </div>
       <ApprovalRules rank={item?.rank ?? 4} />
+      <div className="col-span-2">
+        <RankLegend withL4 />
+      </div>
     </div>
   );
 }

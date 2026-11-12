@@ -289,3 +289,49 @@ export function ValueInput({ item, cur, value, onChange, readOnly }: { item: Set
     </>
   );
 }
+
+/** ランク（L1〜L3）の説明。setting_classification.xlsx の「ランク定義」。withL4 で L4 の行も出す */
+export function RankLegend({ withL4 }: { withL4?: boolean }) {
+  const td = 'py-2 pr-4 align-top';
+  return (
+    <Card title={<>危険度（ランク）について <span className="text-xs font-normal text-slate-500">設定項目は、間違えたときの危険の大きさでランク分けしています</span></>}>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
+          <tr>
+            <th className="w-28 px-4 py-2">ランク</th>
+            <th className="py-2">基準</th>
+            <th className="py-2">必要な承認</th>
+            <th className="py-2 pr-4">反映のしかた</th>
+          </tr>
+        </thead>
+        <tbody>
+          {([1, 2, 3] as const).map((r) => (
+            <tr key={r} className="border-b border-slate-100 dark:border-slate-800">
+              <td className={cx(td, 'px-4 whitespace-nowrap')}>
+                <Tag tone={RANKS[r].tone}>{RANKS[r].short}</Tag> {RANKS[r].name}
+              </td>
+              <td className={td}>{RANKS[r].desc}</td>
+              <td className={cx(td, 'whitespace-nowrap')}>{RANKS[r].need}</td>
+              <td className={td}>{RANKS[r].reflect}</td>
+            </tr>
+          ))}
+          {withL4 && (
+            <tr className="border-b border-slate-100 dark:border-slate-800">
+              <td className={cx(td, 'px-4 whitespace-nowrap')}>
+                <span className="inline-block rounded bg-violet-100 px-1.5 py-0.5 text-[11px] font-bold text-violet-700 dark:bg-violet-950 dark:text-violet-300">L4</span> SHRAGD のみ
+              </td>
+              <td className={td}>安全や通信の根幹。企業側では変更できない</td>
+              <td className={cx(td, 'whitespace-nowrap')}>企業からは申請できない</td>
+              <td className={td}>SHRAGD の運営者が実施し、監査ログに残します。</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <div className="px-4 py-3 text-xs leading-relaxed text-slate-500">
+        管理者は、L1・L2 の項目なら申請なしで変更できます（サインが必要で、変更の記録が残ります）。L3 は管理者でも申請と 2 人の承認が必要です。
+        <br />
+        L2・L3 は、承認の前に「現在の値 → 新しい値」を確認画面で表示します。
+      </div>
+    </Card>
+  );
+}
