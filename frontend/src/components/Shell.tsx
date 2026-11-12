@@ -8,9 +8,11 @@ import {
   emit,
   estop,
   logout,
+  markReqRead,
   nav,
   openModal,
   openVehicle,
+  reqNotes,
   stopAll,
   task,
   togglePop,
@@ -25,7 +27,8 @@ import { Battery, Btn, cx, fmtDT, fmtNum, fmtPct, fmtT, Tag, VChip } from './ui'
 export function Header() {
   const s = useStore();
   const loc = useLocation();
-  const unread = s.notes.filter((n) => !n.read).length;
+  // 申請の通知は、対応が必要なもの（承認待ち・変更待ち）は対応するまで数え続ける
+  const unread = s.notes.filter((n) => !n.read).length + reqNotes().filter((n) => !n.read).length;
   const pop = (kind: 'conn' | 'bell' | 'user') => (e: MouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     togglePop({ kind, x: r.right, y: r.bottom + 6, right: true });
@@ -208,18 +211,53 @@ function ConnPop() {
   );
 }
 
+const NOTE_TONE = {
+  amber: 'bg-amber-50 dark:bg-amber-950/40',
+  blue: 'bg-blue-50 dark:bg-blue-950/40',
+  red: 'bg-red-50 dark:bg-red-950/50',
+  green: 'bg-green-50 dark:bg-green-950/40',
+};
+const NOTE_DOT = { amber: 'bg-amber-500', blue: 'bg-blue-600', red: 'bg-red-500', green: 'bg-green-600' };
+
 function BellPop() {
   const s = useStore();
+  const req = reqNotes();
   return (
     <div>
       <div className="mb-2 flex items-center">
         <b>通知</b>
         <div className="flex-1" />
-        <button type="button" className="text-xs text-blue-600 hover:underline" onClick={() => { s.notes.forEach((n) => (n.read = true)); emit(); }}>
+        <button type="button" className="text-xs text-blue-600 hover:underline" onClick={() => { s.notes.forEach((n) => (n.read = true)); markReqRead(req.filter((n) => !n.action).map((n) => n.key)); emit(); }}>
           すべて既読にする
         </button>
       </div>
-      {!s.notes.length && <div className="py-4 text-center text-slate-400">通知はありません</div>}
+      {!s.notes.length && !req.length && <div className="py-4 text-center text-slate-400">通知はありません</div>}
+      {req.length > 0 && (
+        <div className="mb-2 space-y-1 border-b border-slate-200 pb-2 dark:border-slate-700">
+          <div className="text-xs font-bold text-slate-500">設定の申請</div>
+          {req.slice(0, 8).map((n) => (
+            <button
+              type="button"
+              key={n.key}
+              onClick={() => {
+                if (!n.action) markReqRead([n.key]);
+                closePop();
+                nav(n.link);
+              }}
+              className={cx('block w-full rounded-md px-2 py-1.5 text-left hover:brightness-95', !n.read && NOTE_TONE[n.tone])}
+            >
+              <div className={cx(!n.read && 'font-bold')}>
+                {!n.read && <span className={cx('mr-1 inline-block h-2 w-2 rounded-full', NOTE_DOT[n.tone])} />}
+                {n.text}
+              </div>
+              <div className="text-xs text-slate-500">
+                {fmtDT(n.at)}
+                {n.action && ' ・ 対応するまで表示されます'}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
       <div className="max-h-80 space-y-1 overflow-auto">
         {s.notes.slice(0, 12).map((n) => (
           <button

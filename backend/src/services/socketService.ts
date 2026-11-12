@@ -170,9 +170,16 @@ class SocketService {
   }
 
   // 運行の設定が変わったことを知らせる
-  broadcastSettingsChanged(settings: { ops: { battWarn: number; battMin: number } }) {
+  broadcastSettingsChanged(settings: { ops: { battWarn: number; battMin: number }; values: Record<string, string> }) {
     if (this.io) {
       this.io.emit('settings:changed', settings);
+    }
+  }
+
+  // 設定変更の申請に変化があったことを知らせる（画面は一覧と通知を取り直す）
+  broadcastChangeRequestsChanged() {
+    if (this.io) {
+      this.io.emit('change-requests:changed');
     }
   }
 

@@ -2,13 +2,21 @@
 // データはバックエンド（REST API と Socket.IO）から取り、画面はここを通して読み書きする。
 // まだバックエンドに無い操作（一時停止・移動の指示・ユーザー登録など）は NOT_SUPPORTED で止める。
 // 運行の設定（バッテリーのしきい値）はサーバーに保存し、全端末で共有する。
+// 設定の変更は、申請・承認・サイン付きの変更を通す（下の「設定変更の申請」）。
 import { useSyncExternalStore } from 'react';
 import { isAxiosError } from 'axios';
 import { api } from '../services/api';
 import { emitWithAck, socket } from '../services/socket';
-import { demoCommand, demoOn, resetDemo, setDemoEnabled } from '../services/demo'; // 【仮】デモモード
+import { demoCommand, demoOn, resetDemo, setDemoEnabled, setDemoUser } from '../services/demo'; // 【仮】デモモード
 import {
+  approvalsOf,
   ERR,
+  fmtSetting,
+  needApprovals,
+  SETTING_ITEMS,
+  type ChangeRequest,
+  type Rank,
+  type ReqStatus,
   isFree,
   LATCHED,
   wpByName,
@@ -138,6 +146,16 @@ const loadPrefs = (): Partial<Prefs> => {
 };
 const prefs = loadPrefs();
 
+// 申請の通知のうち、読んだもの（この端末のブラウザに保存）
+const REQ_READ_KEY = 'vecom_req_read';
+const loadReqRead = () => {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(REQ_READ_KEY) || '[]') as string[]);
+  } catch {
+    return new Set<string>();
+  }
+};
+
 // 【仮】デモモード（前回オンにしたままなら、そのまま始める）
 const demoAtStart = prefs.demo === true;
 if (demoAtStart) setDemoEnabled(true);
@@ -165,7 +183,11 @@ export const S = {
   theme: (prefs.theme ?? 'light') as 'light' | 'dark',
   sound: prefs.sound ?? true,
   // 運行の設定。battWarn・battMin はサーバー（GET /api/settings）から読む。maxSpeed・obstacle は表示だけ
-  ops: { battWarn: 30, battMin: 20, maxSpeed: 0.3, obstacle: 0.45 },
+  ops: { battWarn: 30, battMin: 20, maxSpeed: 5, obstacle: 0.45 }, // maxSpeed は km/h
+  // 申請できる設定項目の今の値（GET /api/settings の values）
+  values: Object.fromEntries(SETTING_ITEMS.map((i) => [i.key, i.def])) as Record<string, string>,
+  requests: [] as ChangeRequest[], // 管理者はすべて、それ以外は自分の申請だけ
+  reqRead: loadReqRead(),
   seq: { note: 1, toast: 1 },
 };
 
@@ -345,8 +367,12 @@ async function loadLogs() {
 }
 
 async function loadSettings() {
-  const res = await api.get<{ ops: OpsSettings }>('/settings');
+  const res = await api.get<{ ops: OpsSettings; values?: Record<string, string> }>('/settings');
   applyOps(res.data.ops);
+  applyValues(res.data.values);
+}
+function applyValues(v: Record<string, string> | undefined) {
+  if (v) Object.assign(S.values, v);
 }
 function applyOps(o: Partial<OpsSettings> | undefined) {
   if (typeof o?.battWarn === 'number') S.ops.battWarn = o.battWarn;
@@ -385,6 +411,7 @@ async function reloadAll() {
     relink();
     S.loaded = true;
     emit();
+    reloadRequests(); // 失敗しても、ほかの表示は続ける
   } catch (e) {
     console.error('データの取得に失敗しました:', e);
     toast('サーバーからデータを取得できませんでした', 'error');
@@ -564,9 +591,15 @@ function listen() {
   });
 
   // 運行の設定の変更（ほかの端末で保存されたとき）
-  on('settings:changed', (st: { ops?: OpsSettings }) => {
+  on('settings:changed', (st: { ops?: OpsSettings; values?: Record<string, string> }) => {
     applyOps(st?.ops);
+    applyValues(st?.values);
     emit();
+  });
+
+  // 設定変更の申請（申請・承認・不承認・変更）
+  on('change-requests:changed', () => {
+    reloadRequests();
   });
 
   // ユーザーの追加・変更・削除（自分の名前が変わったときのため、本人の情報も読み直す）
@@ -579,7 +612,7 @@ function listen() {
 // 【仮】デモモードの切り替え（設定 → デモ）。この端末のブラウザだけで動き、サーバーには何も送らない
 // ---------------------------------------------------------------
 function clearData() {
-  Object.assign(S, { vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
+  Object.assign(S, { requests: [], vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
   pagedLogs.clear();
 }
 
@@ -619,6 +652,7 @@ export function startSession(user: { username: string; role: string }, logout: (
   logoutFn = logout;
   const role = (['ADMIN', 'OPERATOR', 'VIEWER'].includes(user.role) ? user.role : 'VIEWER') as Role;
   S.user = { name: user.username, role };
+  setDemoUser(user.username, role); // 【仮】デモの申請で「誰が」を使う
   S.users = [{ id: 'me', name: user.username, email: '—', role, created: '—' }];
   inSession = true;
   listen();
@@ -629,7 +663,7 @@ export function startSession(user: { username: string; role: string }, logout: (
 
 export function endSession() {
   inSession = false;
-  Object.assign(S, { loaded: false, vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
+  Object.assign(S, { requests: [], loaded: false, vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
   emit();
 }
 
@@ -1018,17 +1052,149 @@ export async function setTestOnline(id: string, online: boolean) {
 }
 
 // ---------------------------------------------------------------
-// 運行の設定 — PUT /api/settings（ADMIN のみ）
+// 設定変更の申請 — /api/change-requests、/api/settings/direct
+// 申請はすべての管理者に届き、承認した管理者がサインして変更する
 // ---------------------------------------------------------------
-export async function saveOps(o: OpsSettings) {
+interface ApiReq {
+  id: string;
+  settingKey: string;
+  settingLabel: string;
+  rank: number;
+  currentValue: string;
+  requestedValue: string;
+  reason: string;
+  effect: string | null;
+  safetyRule: string | null;
+  pledgedAt: string | null;
+  status: ReqStatus;
+  direct: boolean;
+  requestedByName: string;
+  appliedValue: string | null;
+  appliedByName: string | null;
+  signature: string | null;
+  appliedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reviews: { reviewerName: string; decision: 'APPROVE' | 'REJECT'; comment: string | null; createdAt: string }[];
+}
+const toReq = (a: ApiReq): ChangeRequest => ({
+  id: a.id,
+  key: a.settingKey,
+  label: a.settingLabel,
+  rank: (a.rank >= 3 ? 3 : a.rank <= 1 ? 1 : 2) as Rank,
+  cur: a.currentValue,
+  value: a.requestedValue,
+  reason: a.reason,
+  effect: a.effect ?? '',
+  rule: a.safetyRule ?? '',
+  pledgedAt: ms(a.pledgedAt),
+  status: a.status,
+  direct: a.direct,
+  requester: a.requestedByName,
+  reviews: a.reviews.map((v) => ({ name: v.reviewerName, decision: v.decision, comment: v.comment ?? '', at: ms(v.createdAt) ?? 0 })),
+  appliedValue: a.appliedValue,
+  appliedBy: a.appliedByName,
+  signature: a.signature,
+  appliedAt: ms(a.appliedAt),
+  at: ms(a.createdAt) ?? 0,
+  updatedAt: ms(a.updatedAt) ?? 0,
+});
+
+async function loadRequests() {
+  const res = await api.get<ApiReq[]>('/change-requests');
+  S.requests = res.data.map(toReq);
+}
+async function reloadRequests() {
   try {
-    const res = await api.put<{ ops: OpsSettings }>('/settings', { ops: o });
-    applyOps(res.data.ops);
+    await loadRequests();
     emit();
-    toast('運行の設定を保存しました', 'ok');
   } catch (e) {
-    toast(errMsg(e, '運行の設定の保存に失敗しました'), 'error');
+    console.error('申請の取得に失敗しました:', e);
   }
+}
+
+// 申請の操作の共通部分。成功したら一覧を差し替えて、結果を返す
+async function reqAction(call: () => Promise<{ data: ApiReq }>, okMsg: string, failMsg: string): Promise<ChangeRequest | null> {
+  try {
+    const r = toReq((await call()).data);
+    const i = S.requests.findIndex((x) => x.id === r.id);
+    if (i >= 0) S.requests[i] = r;
+    else S.requests.unshift(r);
+    emit();
+    toast(okMsg, 'ok');
+    return r;
+  } catch (e) {
+    toast(errMsg(e, failMsg), 'error');
+    return null;
+  }
+}
+
+export type RequestInput = { key: string; value: string; reason: string; effect: string; safetyRule: string; pledged: boolean };
+export const submitChangeRequest = (d: RequestInput) =>
+  reqAction(() => api.post<ApiReq>('/change-requests', d), '申請を送信しました。すべての管理者に通知されます', '申請の送信に失敗しました');
+
+export const reviewRequest = (id: string, decision: 'APPROVE' | 'REJECT', comment: string) =>
+  reqAction(
+    () => api.post<ApiReq>(`/change-requests/${id}/review`, { decision, comment }),
+    decision === 'APPROVE' ? '承認しました' : '不承認にしました。申請者に通知されます',
+    '承認・不承認の処理に失敗しました',
+  );
+
+export const withdrawRequest = (id: string) => reqAction(() => api.post<ApiReq>(`/change-requests/${id}/withdraw`), '申請を取り下げました', '申請の取り下げに失敗しました');
+
+export async function applyRequest(id: string, signature: string) {
+  const r = await reqAction(() => api.post<ApiReq>(`/change-requests/${id}/apply`, { signature }), '設定を変更しました。変更の記録が残り、関係者に通知されます', '設定の変更に失敗しました');
+  if (r) await loadSettings().then(emit, () => undefined);
+  return r;
+}
+
+export async function directChange(d: { key: string; value: string; reason: string; signature: string }) {
+  const r = await reqAction(() => api.post<ApiReq>('/settings/direct', d), '設定を変更しました。変更の記録が残り、管理者に通知されます', '設定の変更に失敗しました');
+  if (r) await loadSettings().then(emit, () => undefined);
+  return r;
+}
+
+// 【仮】デモ中だけ：ほかの管理者が承認したことにする（1人でも2人承認の流れを試せるように）
+export const demoApproveAs = (id: string) => reqAction(() => api.post<ApiReq>(`/change-requests/${id}/demo-approve`), 'ほかの管理者として承認しました（デモ）', '承認に失敗しました');
+
+// ---------------------------------------------------------------
+// 申請の通知（申請の状態から作る。対応が必要なものは、対応するまで出し続ける）
+// ---------------------------------------------------------------
+export type ReqNote = { key: string; text: string; at: number; tone: 'amber' | 'blue' | 'red' | 'green'; link: string; read: boolean; action: boolean };
+const DAY = 86_400_000;
+
+export function reqNotes(): ReqNote[] {
+  const me = S.user.name;
+  const admin = S.user.role === 'ADMIN';
+  const out: ReqNote[] = [];
+  for (const r of S.requests) {
+    const add = (tone: ReqNote['tone'], text: string, link: string, at: number, action = false) => {
+      const key = `${r.id}:${r.status}`;
+      out.push({ key, text, at, tone, link, action, read: action ? false : S.reqRead.has(key) });
+    };
+    const ok = approvalsOf(r);
+    if (admin && r.status === 'PENDING' && r.requester !== me && !r.reviews.some((v) => v.name === me)) {
+      add('amber', `承認待ち：${r.label}（${r.requester} さん・承認 ${ok.length}/${needApprovals(r.rank)}）`, `/settings/approvals/${r.id}`, r.at, true);
+    } else if (admin && r.status === 'APPROVED' && ok.some((v) => v.name === me)) {
+      add('blue', `変更待ち：${r.label} を ${fmtSetting(r.key, r.value)} に変更してください`, `/settings/approvals/${r.id}`, r.updatedAt, true);
+    } else if (r.status === 'REJECTED' && r.requester === me && now() - r.updatedAt < 14 * DAY) {
+      const rv = r.reviews.find((v) => v.decision === 'REJECT');
+      add('red', `不承認：${r.label}（${rv?.name ?? '管理者'}「${rv?.comment ?? ''}」）`, '/settings/request', r.updatedAt);
+    } else if (r.status === 'APPLIED' && r.appliedBy !== me && (admin || r.requester === me) && r.appliedAt && now() - r.appliedAt < 7 * DAY) {
+      add('green', `変更済み：${r.label} ${fmtSetting(r.key, r.cur)} → ${fmtSetting(r.key, r.appliedValue)}（変更：${r.appliedBy}）`, admin ? '/settings/approvals' : '/settings/request', r.appliedAt);
+    }
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+
+export function markReqRead(keys: string[]) {
+  keys.forEach((k) => S.reqRead.add(k));
+  try {
+    localStorage.setItem(REQ_READ_KEY, JSON.stringify([...S.reqRead].slice(-300)));
+  } catch {
+    /* 保存できない環境では何もしない */
+  }
+  emit();
 }
 
 // ---------------------------------------------------------------
