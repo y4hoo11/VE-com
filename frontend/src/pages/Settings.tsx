@@ -12,6 +12,7 @@ const DEMO_NA = 'デモモード中は使えません（設定 → デモ で終
 const MENU: [string, string, boolean][] = [
   ['display', '表示', false],
   ['account', 'アカウント', false],
+  ['values', '現在の設定値', false],
   ['request', '変更申請', false],
   ['approvals', '申請の承認', true],
   ['ops', '運行', true],
@@ -48,7 +49,7 @@ export function Settings() {
             🔒 この設定は管理者（ADMIN）だけが見られます。
           </Card>
         ) : (
-          { display: <Display />, account: <Account />, request: <ChangeRequest />, approvals: <SettingApprovals />, ops: <Ops />, vehicles: <Vehicles />, users: <Users />, system: <System />, demo: <Demo /> }[item[0]]
+          { display: <Display />, account: <Account />, values: <CurrentValues />, request: <ChangeRequest />, approvals: <SettingApprovals />, ops: <Ops />, vehicles: <Vehicles />, users: <Users />, system: <System />, demo: <Demo /> }[item[0]]
         )}
       </div>
     </div>
@@ -175,6 +176,53 @@ function Demo() {
           <li>走る速さや作業時間は、見やすいように実機とは変えています</li>
         </ul>
       </Row>
+    </Card>
+  );
+}
+
+// 現在の設定値（だれでも見られる。見るだけで、変更は「変更申請」から）
+function CurrentValues() {
+  const s = useStore();
+  return (
+    <Card title={<>現在の設定値 <span className="text-xs font-normal text-slate-500">見るだけの一覧です。変更は「変更申請」から行います</span></>}>
+      <table className="w-full text-sm">
+        <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
+          <tr>
+            <th className="px-4 py-2">項目</th>
+            <th className="py-2">ランク</th>
+            <th className="py-2">現在の値</th>
+            <th className="py-2">初期値</th>
+            <th className="py-2 pr-4">影響</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SETTING_ITEMS.map((i) => {
+            const v = s.values[i.key];
+            const changed = v !== i.def;
+            return (
+              <tr key={i.key} className="border-b border-slate-100 last:border-b-0 dark:border-slate-800">
+                <td className="px-4 py-2.5 font-medium">{i.label}</td>
+                <td className="py-2.5">
+                  <Tag tone={RANKS[i.rank].tone}>{RANKS[i.rank].short}</Tag>
+                </td>
+                <td className="py-2.5">
+                  <b>{fmtSetting(i.key, v)}</b>
+                  {changed && (
+                    <span className="ml-2">
+                      <Tag tone="blue">変更あり</Tag>
+                    </span>
+                  )}
+                </td>
+                <td className="py-2.5 text-slate-500">{fmtSetting(i.key, i.def)}</td>
+                <td className="py-2.5 pr-4 text-slate-500">{i.scope}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-800">
+        最高速度・障害物の距離などの車両側の値は、変更しても車両へ送る仕組みがまだありません（記録と表示だけが変わります）。
+      </div>
     </Card>
   );
 }
