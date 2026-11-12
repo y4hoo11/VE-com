@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { COL, PHASE, TS } from '../store/data';
 import { emit, estop, openLog, openVehicle, S, savePrefs, task, useStore } from '../store/store';
 import { MapView } from '../components/MapView';
-import { Bar, Battery, Btn, Card, cx, fmtNum, fmtPct, fmtT, LvChip, VChip } from '../components/ui';
+import { Bar, Battery, Btn, Card, LvChip, VChip } from '../components/ui';
+import { cx, fmtNum, fmtPct, fmtT } from '../components/uiUtils';
 
 export function Monitor() {
   const s = useStore();

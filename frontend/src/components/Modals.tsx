@@ -19,7 +19,8 @@ import {
   veh,
   type ModalState,
 } from '../store/store';
-import { Battery, Btn, cx, Field, inputCls, Tag, VChip } from './ui';
+import { Battery, Btn, Field, inputCls, Tag, VChip } from './ui';
+import { cx } from './uiUtils';
 
 export function ModalHost() {
   const s = useStore();

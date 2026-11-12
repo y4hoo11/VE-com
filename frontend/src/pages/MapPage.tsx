@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { WAYPOINTS } from '../store/data';
 import { toast, useStore } from '../store/store';
 import { MapView } from '../components/MapView';
-import { Btn, Card, cx, inputCls, Kv, Tag } from '../components/ui';
+import { Btn, Card, inputCls, Kv, Tag } from '../components/ui';
+import { cx } from '../components/uiUtils';
 
 export function MapPage() {
   const s = useStore();

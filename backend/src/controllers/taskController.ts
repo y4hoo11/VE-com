@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import { dispatchService } from '../services/dispatchService';
 import { socketService } from '../services/socketService';
 import { mqttService } from '../services/mqttService';
+import { manualDriveService } from '../services/manualDriveService';
 import { TaskStatus, VehicleStatus, LogLevel } from '@prisma/client';
 import { loadOpsSettings } from './settingsController';
  
@@ -288,6 +289,9 @@ export const assignTask = async (req: Request, res: Response) => {
     });
     if (busy > 0) {
       return res.status(409).json({ error: 'この車両は別のタスクを実行中です' });
+    }
+    if (manualDriveService.isDriving(vId)) {
+      return res.status(409).json({ error: 'この車両は手動操縦中のため割り当てられません' });
     }
     if (v.batteryLevel < ops.battMin) {
       return res.status(409).json({ error: `電池残量が ${ops.battMin}% 未満のため割り当てられません` });

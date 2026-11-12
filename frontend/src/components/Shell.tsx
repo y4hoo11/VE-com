@@ -17,7 +17,8 @@ import {
   useStore,
   veh,
 } from '../store/store';
-import { Battery, Btn, cx, fmtDT, fmtNum, fmtPct, fmtT, Tag, VChip } from './ui';
+import { Battery, Btn, Tag, VChip } from './ui';
+import { cx, fmtDT, fmtNum, fmtPct, fmtT } from './uiUtils';
 
 // ---------------------------------------------------------------
 // ヘッダー

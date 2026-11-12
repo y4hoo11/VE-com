@@ -3,7 +3,8 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { ST } from '../store/data';
 import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, restartDemo, saveOps, savePrefs, setDemoMode, setTestOnline, toast, useStore } from '../store/store';
-import { Btn, Card, cx, fmtT, inputCls, Kv, Tag, VChip } from '../components/ui';
+import { Btn, Card, inputCls, Kv, Tag, VChip } from '../components/ui';
+import { cx, fmtT } from '../components/uiUtils';
 
 // 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める
 const DEMO_NA = 'デモモード中は使えません（設定 → デモ で終了してください）';

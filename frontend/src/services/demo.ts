@@ -31,6 +31,7 @@ type DemoVehicle = {
   wait: number;
   taskId: string | null;
   lastHb: number;
+  manual: { linear: number; angular: number; until: number } | null; // 手動操縦中（until を過ぎたら止まる）
 };
 type DemoHistory = { status: TStatus; note: string; timestamp: string };
 type DemoTask = {
@@ -97,7 +98,7 @@ const wpPt = (name: string): Pt => {
 
 function makeVehicle(id: string, name: string, at: string, status: VStatus, battery: number): DemoVehicle {
   const p = wpPt(at);
-  return { id, name, status, prevStatus: status, x: p.x, y: p.y, theta: 0, battery, speed: 0, paused: false, route: [], routeTotal: 1, goal: null, mode: 'IDLE', phase: null, wait: 0, taskId: null, lastHb: Date.now() };
+  return { id, name, status, prevStatus: status, x: p.x, y: p.y, theta: 0, battery, speed: 0, paused: false, route: [], routeTotal: 1, goal: null, mode: 'IDLE', phase: null, wait: 0, taskId: null, lastHb: Date.now(), manual: null };
 }
 function makeTask(title: string, start: string, target: string, priority: number, createdAt = Date.now()): DemoTask {
   return {
@@ -312,6 +313,30 @@ function sendUpdate(v: DemoVehicle) {
   });
 }
 
+// 手動操縦：届いた速度で動かす。棚・壁にぶつかる手前では進まない。指示が途切れたら止まる
+const MANUAL_TIMEOUT_MS = 600;
+function endManual(v: DemoVehicle, reason: string) {
+  if (!v.manual) return;
+  v.manual = null;
+  v.speed = 0;
+  if (v.status === 'RUNNING') v.status = 'IDLE';
+  addLog(v.id, 'INFO', `手動操縦を終了しました（${reason}）`);
+}
+function driveManually(v: DemoVehicle, dt: number) {
+  const m = v.manual!;
+  if (Date.now() > m.until) return endManual(v, '画面からの指示が途切れた');
+  v.theta = normAngle(v.theta + m.angular * dt);
+  const next = { x: v.x + Math.cos(v.theta) * m.linear * dt, y: v.y + Math.sin(v.theta) * m.linear * dt };
+  if (m.linear !== 0 && isFree(next)) {
+    v.x = next.x;
+    v.y = next.y;
+    v.speed = Math.abs(m.linear);
+    v.battery = Math.max(0, v.battery - DRAIN_PER_SEC * dt);
+  } else {
+    v.speed = 0;
+  }
+}
+
 function tick() {
   const t = Date.now();
   const dt = Math.min((t - lastTick) / 1000, 1); // 裏のタブでタイマーが遅れても、飛びすぎないように
@@ -333,6 +358,9 @@ function tick() {
         busy = true;
         v.wait -= dt;
         if (v.wait <= 0) finishWait(v);
+      } else if (v.manual) {
+        busy = true;
+        driveManually(v, dt);
       } else {
         v.speed = 0;
       }
@@ -411,8 +439,28 @@ export function demoAck(event: string, data: unknown): { ok: boolean; error?: st
   const id = (data as { vehicleId?: string } | null)?.vehicleId;
   const v = vehicles.find((x) => x.id === id);
   if (!v) return { ok: false, error: '車両が見つかりません' };
+  if (event === 'manual_drive') {
+    const d = data as { linear?: number; angular?: number };
+    const linear = Math.max(-0.3, Math.min(0.3, Number(d.linear) || 0));
+    const angular = Math.max(-1, Math.min(1, Number(d.angular) || 0));
+    if (linear === 0 && angular === 0) {
+      endManual(v, 'キーを離した');
+      sendUpdate(v);
+      return { ok: true };
+    }
+    const ng = whyNotMove(v) ?? (v.mode === 'GOTO' ? '地点へ移動中は操縦できません' : null);
+    if (ng) {
+      endManual(v, ng);
+      return { ok: false, error: ng };
+    }
+    if (!v.manual) addLog(v.id, 'INFO', '手動操縦を開始しました');
+    v.manual = { linear, angular, until: Date.now() + MANUAL_TIMEOUT_MS };
+    v.status = 'RUNNING';
+    return { ok: true };
+  }
   if (event === 'manual_emergency_stop') {
     if (v.status === 'OFFLINE') return { ok: false, error: 'オフラインの車両には送れません' };
+    endManual(v, '緊急停止');
     if (v.status !== 'ERROR') v.prevStatus = v.status;
     v.status = 'ERROR';
     v.speed = 0;
@@ -479,6 +527,7 @@ function assignTask(body: Record<string, unknown>): Result {
   if (v.status === 'OFFLINE') return fail(409, 'この車両はオフラインのため割り当てられません');
   if (v.status === 'ERROR') return fail(409, 'この車両は異常中のため割り当てられません');
   if (v.taskId || v.mode === 'GOTO') return fail(409, 'この車両は別のタスクを実行中です');
+  if (v.manual) return fail(409, 'この車両は手動操縦中のため割り当てられません');
   if (v.battery < ops.battMin) return fail(409, `電池残量が ${ops.battMin}% 未満のため割り当てられません`);
 
   t.assignedVehicleId = v.id;

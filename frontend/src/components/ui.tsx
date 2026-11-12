@@ -1,22 +1,8 @@
-// 共通の小さな部品
+// 共通の小さな部品（コンポーネントだけ。関数・定数は uiUtils.ts）
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { COL, PAUSED_COL, ST, TS, type Level, type TStatus, type Vehicle } from '../store/data';
 import { S, useStore } from '../store/store';
-
-const pad = (n: number) => String(n).padStart(2, '0');
-export const fmtT = (ts: number) => {
-  const d = new Date(ts);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-};
-export const fmtDT = (ts: number | null) => {
-  if (!ts) return '—';
-  const d = new Date(ts);
-  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
-// 値が届いていないときは「—」
-export const fmtNum = (v: number | null | undefined, digits: number, unit = '') => (v == null ? '—' : `${v.toFixed(digits)}${unit}`);
-export const fmtPct = (v: number | null | undefined) => (v == null ? '—' : `${Math.round(v)}%`);
+import { cx } from './uiUtils';
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'default' | 'pri' | 'danger' | 'dangerO' | 'ghost';
@@ -63,14 +49,6 @@ const TS_CLASS: Record<TStatus, string> = {
   COMPLETED: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300',
   CANCELLED: 'bg-slate-100 text-slate-500 line-through dark:bg-slate-700 dark:text-slate-400',
   FAILED: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
-};
-export const TS_DOT: Record<TStatus, string> = {
-  PENDING: 'bg-slate-400',
-  ASSIGNED: 'bg-violet-500',
-  IN_PROGRESS: 'bg-blue-500',
-  COMPLETED: 'bg-green-500',
-  CANCELLED: 'bg-slate-300',
-  FAILED: 'bg-red-500',
 };
 export function TChip({ s }: { s: TStatus }) {
   return <span className={cx('inline-block rounded-full px-2 py-0.5 text-xs font-semibold', TS_CLASS[s])}>{TS[s]}</span>;

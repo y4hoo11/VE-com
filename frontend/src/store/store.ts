@@ -701,6 +701,11 @@ export async function stopAll() {
   else toast(`全車停止: ${targets.length - ng.length}台に送信、${ng.length}台は失敗（${ng[0].error}）`, 'error');
 }
 
+// 手動操縦（WASD）。押している間、0.2 秒ごとに速度を送る（linear: 前後 m/s、angular: 回転 rad/s、左回りが +）。
+// サーバーは 0.6 秒届かなければ止める
+export const manualDrive = (vehicleId: string, linear: number, angular: number) =>
+  emitWithAck('manual_drive', { vehicleId, linear, angular });
+
 export function askClear(id: string) {
   const v = veh(id);
   if (!v?.err) return;

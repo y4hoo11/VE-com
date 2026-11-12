@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { COL, MAP_H, MAP_W, OFFICE, PAUSED_COL, SHELVES, WAYPOINTS, ZONES, wpByName, type Pt } from '../store/data';
 import { askGoto, cancelMapMode, closePop, mapModeClick, nearestWp, setMapCursor, togglePop, useStore, veh } from '../store/store';
-import { cx } from './ui';
+import { cx } from './uiUtils';
 
 const X = (x: number) => x * 100;
 const Y = (y: number) => (MAP_H - y) * 100;

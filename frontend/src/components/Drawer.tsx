@@ -22,7 +22,8 @@ import {
   useStore,
   veh,
 } from '../store/store';
-import { Bar, Battery, Btn, cx, fmtDT, fmtNum, fmtPct, fmtT, Kv, LvChip, PrioChip, Section, Tag, TChip, TS_DOT, VChip } from './ui';
+import { Bar, Battery, Btn, Kv, LvChip, PrioChip, Section, Tag, TChip, VChip } from './ui';
+import { cx, fmtDT, fmtNum, fmtPct, fmtT, TS_DOT } from './uiUtils';
 
 // バックエンドに命令が無いボタンに付ける印
 const Na = () => <Tag tone="amber">未対応</Tag>;

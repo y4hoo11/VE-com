@@ -3,6 +3,7 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { VehicleUpdatePayload, LogPayload, SystemStatusPayload } from '../types';
 import { mqttService } from './mqttService';
+import { manualDriveService } from './manualDriveService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel, Role } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
@@ -24,6 +25,7 @@ class SocketService {
     this.io = new Server(httpServer, {
       cors: { origin: '*' },
     });
+    manualDriveService.start((id, level, msg) => this.recordLog(id, level, msg));
 
     // 接続時にトークンを確認する（フロントは io(url, { auth: { token } }) で送る）。
     // 削除されたユーザーはつながらない（画面はログイン画面に戻る）
@@ -60,6 +62,7 @@ class SocketService {
 
           console.warn(`[緊急] Webからの停止命令を受信: ${vehicleId} (${user.username})`);
           mqttService.sendEmergencyStop(vehicleId);
+          manualDriveService.stopVehicle(vehicleId, '緊急停止');
 
           await this.recordLog(vehicleId, LogLevel.ERROR, `Webから緊急停止を指示しました（操作: ${user.username}）`);
 
@@ -77,8 +80,7 @@ class SocketService {
         }
       });
 
-      // Web画面の「確認」ボタン等による緊急状態の解除
-      // 緊急状態の解除（ADMIN と OPERATOR だけ。緊急停止は安全のため VIEWER も押せる）
+      // Web画面の「確認」ボタン等による緊急状態の解除（ADMIN と OPERATOR だけ。緊急停止は安全のため VIEWER も押せる）
       socket.on('acknowledge_emergency', async (data: unknown, ack?: Ack) => {
         if (user.role === Role.VIEWER) return ack?.({ ok: false, error: '閲覧のみの権限では解除できません' });
         const vehicleId = getVehicleId(data);
@@ -121,8 +123,19 @@ class SocketService {
         }
       });
 
+      // 手動操縦（WASD）。押している間、画面から 0.2 秒ごとに速度が届く
+      socket.on('manual_drive', async (data: unknown, ack?: Ack) => {
+        try {
+          ack?.(await manualDriveService.drive(user, socket.id, data));
+        } catch (e) {
+          console.error('手動操縦の処理エラー:', e);
+          ack?.({ ok: false, error: '手動操縦の命令を送れませんでした' });
+        }
+      });
+
       socket.on('disconnect', () => {
         console.log(`[WebSocket] クライアント切断: ${socket.id}`);
+        manualDriveService.stopBySocket(socket.id); // 操縦中に画面が切れたら止める
       });
     });
   }
