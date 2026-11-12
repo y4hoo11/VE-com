@@ -100,9 +100,15 @@ const SPEEDS = [
 ];
 const SEND_MS = 200;
 
+// 自動で戻る異常（自己位置を見失った・障害物で進めないなど）。手で動かして立て直せるよう、操縦は許す。
+// サーバー（backend/src/services/emergencyState.ts）と同じ一覧
+const RECOVERABLE = new Set(['LOCALIZATION_LOST', 'BLOCKED', 'US_STOP', 'COMM_LOST']);
+
 function whyCannotDrive(v: Vehicle) {
   if (!v.online) return 'オフラインの車両は操縦できません';
-  if (v.status === 'ERROR') return '異常中は操縦できません（先に緊急状態を解除してください）';
+  if (v.status === 'ERROR' && !(v.err && !v.err.latched && RECOVERABLE.has(v.err.code))) {
+    return '異常中は操縦できません（先に緊急状態を解除してください）';
+  }
   if (v.taskId) return 'タスクを実行中は操縦できません（先にタスクを中止してください）';
   if (v.mode === 'GOTO') return '地点へ移動中は操縦できません';
   return null;

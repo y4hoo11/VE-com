@@ -5,6 +5,7 @@ import { LogLevel, Role, TaskStatus, VehicleStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { mqttService } from './mqttService';
 import { manualDriveService } from './manualDriveService';
+import { emergencyState } from './emergencyState';
 import type { AuthUser } from '../types/express';
 
 type Result = { ok: boolean; error?: string };
@@ -83,7 +84,11 @@ class VehicleCommandService {
     const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId }, select: { status: true } });
     if (!vehicle) return { ok: false, error: '車両が見つかりません' };
     if (vehicle.status === VehicleStatus.OFFLINE) return { ok: false, error: 'オフラインの車両には送れません' };
-    if (vehicle.status === VehicleStatus.ERROR) return { ok: false, error: '異常中の車両には送れません。先に緊急状態を解除してください' };
+    // 異常中は送らない。ただし、自己位置を見失った・障害物で進めないなど自動で戻る異常のときは、
+    // 立て直すための「現在地の設定」だけは送れる（emergencyState.ts）
+    if (vehicle.status === VehicleStatus.ERROR && !(type === 'SET_POSE' && emergencyState.isRecoverable(vehicleId))) {
+      return { ok: false, error: '異常中の車両には送れません。先に緊急状態を解除してください' };
+    }
 
     if (MOVES.includes(type)) {
       if (manualDriveService.isDriving(vehicleId)) return { ok: false, error: '手動操縦中です。操縦をやめてから操作してください' };

@@ -5,6 +5,7 @@
 import { LogLevel, Role, TaskStatus, VehicleStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { mqttService } from './mqttService';
+import { emergencyState } from './emergencyState';
 import type { AuthUser } from '../types/express';
 
 export const MAX_LINEAR = 0.3; // m/s（前後の速さの上限）
@@ -76,7 +77,8 @@ class ManualDriveService {
     const ng =
       vehicle.status === VehicleStatus.OFFLINE
         ? 'オフラインの車両は操縦できません'
-        : vehicle.status === VehicleStatus.ERROR
+        : // 自己位置を見失った・障害物で進めないなど自動で戻る異常のときは、手で動かして立て直せるようにする（emergencyState.ts）
+          vehicle.status === VehicleStatus.ERROR && !emergencyState.isRecoverable(vehicleId)
           ? '異常中の車両は操縦できません。先に緊急状態を解除してください'
           : (await prisma.task.count({
                 where: { assignedVehicleId: vehicleId, status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] } },

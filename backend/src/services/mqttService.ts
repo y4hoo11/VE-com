@@ -4,6 +4,7 @@ import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
 import type { VehicleTelemetryExtra } from '../types';
 import { taskProgressService } from './taskProgressService';
+import { emergencyState } from './emergencyState';
 
 // 受信するトピック（docs/agv_protocol.md 2-2〜2-6）
 const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online'];
@@ -27,7 +28,12 @@ const STR_KEYS = ['phase', 'goal', 'taskId', 'mode', 'note'] as const;
 function pickTelemetryExtra(m: Record<string, unknown>): VehicleTelemetryExtra | undefined {
   const out: Record<string, unknown> = {};
   for (const k of NUM_KEYS) if (typeof m[k] === 'number') out[k] = m[k];
-  for (const k of STR_KEYS) if (typeof m[k] === 'string') out[k] = m[k];
+  // ROS は「無し」を null で送る（タスクが終わったときの goal・phase・taskId など）。
+  // 捨てると前の値が画面に残り続けるので、空文字にして「消す」と伝える
+  for (const k of STR_KEYS) {
+    if (typeof m[k] === 'string') out[k] = m[k];
+    else if (m[k] === null) out[k] = '';
+  }
   if (typeof m.esp32 === 'boolean') out.esp32 = m.esp32;
   if (typeof m.paused === 'boolean') out.paused = m.paused;
   return Object.keys(out).length ? (out as VehicleTelemetryExtra) : undefined;
@@ -75,6 +81,8 @@ class MqttService {
           const sentStatus = Object.values(VehicleStatus).includes(message.status) ? (message.status as VehicleStatus) : undefined;
           const backOnline = prev?.status === VehicleStatus.OFFLINE && sentStatus !== VehicleStatus.OFFLINE;
           const nextStatus = sentStatus ?? (backOnline ? VehicleStatus.IDLE : undefined);
+          // PC1 が ERROR 以外を送ってきた = 異常の原因が消えた（ラッチしない異常から自動で戻った）
+          if (sentStatus && sentStatus !== VehicleStatus.ERROR) emergencyState.clear(agvId);
 
           // 1. テレメトリ受信: DBのVehicle状態を更新 (upsert)
           const updatedVehicle = await prisma.vehicle.upsert({
@@ -119,6 +127,7 @@ class MqttService {
         } else if (topic.endsWith('/emergency')) {
           const reason = message.reason || '障害物接近による緊急制動';
           console.error(`[MQTT緊急検知] ${agvId}: ${reason}`);
+          emergencyState.record(agvId, message.code);
 
           // まだ DB に無い車両（telemetry より先に emergency が届いた）は記録できないので飛ばす
           const r = await prisma.vehicle.updateMany({
@@ -194,6 +203,7 @@ class MqttService {
   sendEmergencyStop(agvId: string) {
     const topic = `agv/${agvId}/command`;
     mqttClient.publish(topic, JSON.stringify({ action: 'EMERGENCY_STOP' }));
+    emergencyState.recordWebEstop(agvId);
     console.warn(`[MQTT送信] ${agvId} に緊急停止コマンドを発行しました`);
   }
 }
