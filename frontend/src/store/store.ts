@@ -514,7 +514,14 @@ function listen() {
       if (tm.phase !== undefined) v.phase = (['TO_START', 'LOADING', 'TO_TARGET', 'UNLOADING'].includes(tm.phase) ? tm.phase : null) as Phase | null;
       if (tm.goal !== undefined) v.goal = tm.goal || null;
       if (tm.paused !== undefined) v.paused = tm.paused;
-      if (tm.mode !== undefined) v.rosMode = tm.mode || null;
+      if (tm.mode !== undefined) {
+        const prevMode = v.rosMode;
+        v.rosMode = tm.mode || null;
+        // 移動が終わった・待ちに入った・手動操縦に切り替わったときに、前の経路を消す。
+        // （Nav2 の経路は走り出す直前に1回だけ届き、その直後の telemetry はまだ IDLE のことがあるので、
+        //   「IDLE を受け取ったら消す」だと届いたばかりの経路まで消してしまう。切り替わった瞬間だけ消す）
+        if (!u.demo && prevMode !== v.rosMode && ['IDLE', 'WAIT', 'MANUAL', 'OFFLINE'].includes(v.rosMode ?? '')) v.route = [];
+      }
       if (tm.note !== undefined) v.note = tm.note || null;
     }
     if (u.status !== undefined) {
@@ -541,8 +548,8 @@ function listen() {
       // 実機：タスクでない移動（地点へ移動・ホームへ戻る）は「走っていて行き先がある」で判断する
       v.mode = v.status === 'RUNNING' && v.goal ? 'GOTO' : 'IDLE';
     }
-    // 止まったら、前の経路は消す（次の経路は agv/{id}/path で届く）
-    if (!u.demo && u.status !== undefined && v.status !== 'RUNNING') v.route = [];
+    // オフラインになったら経路は消す（移動の終わりは上の rosMode の切り替わりで消している）
+    if (!u.demo && v.status === 'OFFLINE') v.route = [];
     v.lastHb = now();
     emit();
   });

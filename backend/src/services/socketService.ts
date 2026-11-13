@@ -5,7 +5,7 @@ import { VehicleUpdatePayload, LogPayload, SystemStatusPayload, TaskProgressPayl
 import { mqttService } from './mqttService';
 import { manualDriveService } from './manualDriveService';
 import { vehicleCommandService } from './vehicleCommandService';
-import { emergencyState } from './emergencyState';
+import { ACK_LOG_PREFIX, emergencyState } from './emergencyState';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel, Role } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
@@ -99,7 +99,8 @@ class SocketService {
           // 車両（ラズパイ・PC1）にも解除を送る（docs/agv_protocol.md 2-1）
           // これを送らないと、Webで解除しても実機は止まったまま動かない
           mqttService.sendVehicleCommand(vehicleId, { action: 'CLEAR_EMERGENCY' });
-          emergencyState.clear(vehicleId);
+          // 緊急停止など「解除が必要な原因」だけ忘れる（自己位置の喪失など、まだ続いている原因は残す）
+          emergencyState.clearLatched(vehicleId);
 
           await prisma.vehicle.update({
             where: { id: vehicleId },
@@ -112,7 +113,8 @@ class SocketService {
             emergencyReason: null,
           });
 
-          await this.recordLog(vehicleId, LogLevel.INFO, `緊急状態を解除しました（操作: ${user.username}）`);
+          // 文言は emergencyState.ts の ACK_LOG_PREFIX と合わせる（再起動後に「解除済みか」をログから判断するため）
+          await this.recordLog(vehicleId, LogLevel.INFO, `${ACK_LOG_PREFIX}（操作: ${user.username}）`);
 
           if (!mqttService.isConnected()) {
             return ack?.({

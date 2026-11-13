@@ -78,7 +78,7 @@ class ManualDriveService {
       vehicle.status === VehicleStatus.OFFLINE
         ? 'オフラインの車両は操縦できません'
         : // 自己位置を見失った・障害物で進めないなど自動で戻る異常のときは、手で動かして立て直せるようにする（emergencyState.ts）
-          vehicle.status === VehicleStatus.ERROR && !emergencyState.isRecoverable(vehicleId)
+          vehicle.status === VehicleStatus.ERROR && !(await emergencyState.isRecoverable(vehicleId))
           ? '異常中の車両は操縦できません。先に緊急状態を解除してください'
           : (await prisma.task.count({
                 where: { assignedVehicleId: vehicleId, status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] } },

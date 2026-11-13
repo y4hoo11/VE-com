@@ -86,7 +86,7 @@ class VehicleCommandService {
     if (vehicle.status === VehicleStatus.OFFLINE) return { ok: false, error: 'オフラインの車両には送れません' };
     // 異常中は送らない。ただし、自己位置を見失った・障害物で進めないなど自動で戻る異常のときは、
     // 立て直すための「現在地の設定」だけは送れる（emergencyState.ts）
-    if (vehicle.status === VehicleStatus.ERROR && !(type === 'SET_POSE' && emergencyState.isRecoverable(vehicleId))) {
+    if (vehicle.status === VehicleStatus.ERROR && !(type === 'SET_POSE' && (await emergencyState.isRecoverable(vehicleId)))) {
       return { ok: false, error: '異常中の車両には送れません。先に緊急状態を解除してください' };
     }
 
