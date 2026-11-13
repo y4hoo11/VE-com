@@ -235,7 +235,7 @@ export const SETTING_ITEMS: SettingItem[] = [
   { key: 'battMin', label: '割り当てない残量（充電に戻る基準）', rank: 2, scope: '全車両', def: '20', type: 'number', unit: '%', deltaUnit: 'ポイント', min: 10, max: 50, step: 1 },
   { key: 'hours', label: '稼働時間帯（走行を許可する時間）', rank: 2, scope: '全車両', def: '終日', type: 'text', placeholder: '例：08:00〜18:00' },
   { key: 'waypoints', label: '登録地点（経由地・目的地）の追加・位置変更', rank: 2, scope: '全車両', def: '現在の登録地点', type: 'text', placeholder: '追加・移動する地点と、その位置' },
-  { key: 'maxSpeed', label: '最高速度（agv.max_speed）', rank: 3, scope: '全車両', def: '5', type: 'number', unit: 'km/h', min: 1, max: 6, step: 0.5, hardLimit: true },
+  { key: 'maxSpeed', label: '最高速度', rank: 3, scope: '全車両', def: '5', type: 'number', unit: 'km/h', min: 1, max: 6, step: 0.5, hardLimit: true },
   { key: 'obstacle', label: '障害物検知で減速・停止を始める距離', rank: 3, scope: '全車両', def: '0.45', type: 'number', unit: 'm', min: 0.2, max: 2, step: 0.05 },
   { key: 'keepout', label: '立入禁止エリアの追加・削除', rank: 3, scope: '全車両', def: '未設定', type: 'text', placeholder: '追加・削除するエリアと、その範囲' },
   { key: 'map', label: '使用する地図の切り替え', rank: 3, scope: '全車両', def: 'warehouse_map', type: 'select', options: ['warehouse_map', 'warehouse_a', 'warehouse_b', 'demo_map', 'simple', 'maze'] },

@@ -7,7 +7,7 @@ import { Btn, Card, cx, fmtDT, fmtT, FormRow, inputCls, Kv, LockIcon, RankBadge,
 import { SettingApprovals } from './SettingApprovals';
 
 // 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める
-const DEMO_NA = 'デモモード中は使えません（設定 → デモ で終了してください）';
+const DEMO_NA = 'デモモード中は使えません';
 
 const MENU: [string, string, boolean][] = [
   ['display', '表示', false],
@@ -45,7 +45,7 @@ export function Settings() {
       <div className="min-h-0 overflow-auto">
         {locked ? (
           <Card title={item[1]} bodyClass="p-8 text-center text-slate-500">
-            🔒 この設定は管理者（ADMIN）だけが見られます。
+            管理者のみ閲覧できます。
           </Card>
         ) : (
           { display: <Display />, account: <Account />, values: <CurrentValues />, request: <ChangeRequest />, approvals: <SettingApprovals />, vehicles: <Vehicles />, users: <Users />, system: <System />, demo: <Demo /> }[item[0]]
@@ -122,11 +122,11 @@ function Display() {
             鳴らす
           </label>
           <Btn size="sm" onClick={() => playAlarm(true)}>
-            🔊 試しに鳴らす
+            試しに鳴らす
           </Btn>
         </div>
       </Row>
-      <Row label="受け取る通知" hint="自分の通知欄に出すイベントの種類">
+      <Row label="受け取る通知">
         <div className="flex items-center gap-4 text-sm text-slate-400">
           {['お知らせ', '警告', '異常'].map((k) => (
             <label key={k} className="flex items-center gap-1.5">
@@ -162,8 +162,8 @@ function Demo() {
       <Row label="試せること">
         <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
           <li>地図の車両の移動と、進行方向を示す矢印の向き</li>
-          <li>🏠 ホームへ戻る、📍 地点へ移動、🎯 現在地を設定（車両をクリックして詳細から）</li>
-          <li>⏸ 一時停止・再開、✓ 積み降ろし完了</li>
+          <li>ホームへ戻る、地点へ移動、現在地を設定（車両をクリックして詳細から）</li>
+          <li>一時停止・再開、積み降ろし完了</li>
           <li>タスクの作成・割り当て・進捗・完了・中止（電池不足やオフラインの車両は断られます）</li>
           <li>緊急停止と解除、異常の音、記録の絞り込み</li>
         </ul>
@@ -171,7 +171,7 @@ function Demo() {
       <Row label="知っておくこと">
         <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
           <li>データはメモリにあるだけで、再読み込みすると最初に戻ります</li>
-          <li>ほかの端末やタブとは共有されません</li>
+          <li>他の端末やタブとは共有されません</li>
           <li>走る速さや作業時間は、見やすいように実機とは変えています</li>
         </ul>
       </Row>
@@ -184,7 +184,7 @@ function CurrentValues() {
   const s = useStore();
   return (
     <div className="space-y-3">
-      <Card title={<>現在の設定値 <span className="text-xs font-normal text-slate-500">見るだけの一覧です。変更は「変更申請」から行います</span></>}>
+      <Card title="現在の設定値">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
             <tr>
@@ -221,7 +221,7 @@ function CurrentValues() {
           </tbody>
         </table>
         <div className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:border-slate-800">
-          最高速度・障害物の距離などの車両側の値は、変更しても車両へ送る仕組みがまだありません（記録と表示だけが変わります）。
+          最高速度と障害物の距離は、まだ車両に反映されません。
         </div>
       </Card>
       <RankLegend />
@@ -280,7 +280,7 @@ function Vehicles() {
                 <Btn
                   size="sm"
                   disabled={v.status === 'ERROR'}
-                  title={v.status === 'ERROR' ? '異常中は切り替えられません' : 'telemetry が無くてもオンライン扱いにします（サーバー再起動で元に戻ります）'}
+                  title={v.status === 'ERROR' ? '異常中は切り替えられません' : 'データが届いていなくてもオンライン扱いにします（サーバー再起動で戻ります）'}
                   onClick={() => setTestOnline(v.id, !v.online)}
                 >
                   {v.online ? 'オフラインにする' : 'オンラインにする'}
@@ -361,10 +361,10 @@ function System() {
   const ok = (b: boolean, t = '正常', f = '切断') => <span className={b ? 'text-green-600' : 'font-bold text-red-600'}>● {b ? t : f}</span>;
   return (
     <div className="space-y-3">
-      <Card title={<>接続 <span className="text-xs font-normal text-slate-500">接続先の変更はサーバーの .env で行います（画面からは変えません）</span></>} bodyClass="px-5">
-        <Row label="ブラウザ ⇔ サーバー" hint="Socket.IO">{ok(s.server, '接続中')}</Row>
-        <Row label="サーバー ⇔ MQTTブローカー" hint="mqtt://localhost:1883（Mosquitto）">{ok(s.mqtt, '接続中')}</Row>
-        <Row label="データベース" hint="PostgreSQL agv_warehouse">{ok(s.loaded, '正常', '取得できません')}</Row>
+      <Card title="接続" bodyClass="px-5">
+        <Row label="ブラウザ ⇔ サーバー">{ok(s.server, '接続中')}</Row>
+        <Row label="サーバー ⇔ MQTTブローカー">{ok(s.mqtt, '接続中')}</Row>
+        <Row label="データベース">{ok(s.loaded, '正常', '取得できません')}</Row>
       </Card>
       <Card title="車両との通信">
         <table className="w-full text-sm">
@@ -493,7 +493,7 @@ function missingOf(item: SettingItem, cur: string, f: { value: string; reason: s
     (!f.reason.trim()
       ? '理由を入力してください'
       : item.rank >= 2 && !f.effect.trim()
-        ? 'それがもたらす効果を入力してください'
+        ? '変更による効果を入力してください'
         : item.rank === 3 && !f.rule.trim()
           ? '安全に関するルール案を入力してください'
           : item.rank === 3 && !f.pledged.every(Boolean)

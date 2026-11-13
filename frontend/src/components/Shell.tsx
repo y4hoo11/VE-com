@@ -73,7 +73,7 @@ export function Header() {
       <button
         type="button"
         onClick={stopAll}
-        title="全車両に緊急停止を送ります（確認なし）"
+        title="確認なしで全車両を緊急停止します"
         className="rounded-md bg-red-600 px-5 py-2 text-sm font-extrabold tracking-wider text-white shadow-[0_0_0_3px_rgba(220,38,38,0.35)] hover:bg-red-700 active:scale-95"
       >
         ■ 全車停止
@@ -94,8 +94,8 @@ export function AlertBanner() {
       {/* 【仮】デモモードの表示。実データと見間違えないよう、どの画面でも出す */}
       {s.demo && (
         <div className="flex items-center gap-3 border-b border-violet-300 bg-violet-100 px-4 py-2 text-sm text-violet-900 dark:border-violet-800 dark:bg-violet-950 dark:text-violet-200">
-          🧪 <b>デモモード</b>
-          <span>表示は実データではありません。操作はサーバー・実機に送られません。</span>
+          <b>デモモード</b>
+          <span>操作はサーバー・実機に送られません。</span>
           <a href="#/settings/demo" className="ml-auto underline">
             設定で切り替え
           </a>
@@ -104,13 +104,13 @@ export function AlertBanner() {
       {!s.server && (
         <div className="flex items-center gap-3 border-b border-red-300 bg-red-50 px-4 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
           ⚠ <b>サーバーとの接続が切れています</b>
-          <span>画面の表示は最新ではありません。再接続を試みています。</span>
+          <span>再接続しています。</span>
         </div>
       )}
       {s.server && !s.mqtt && (
         <div className="flex items-center gap-3 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           ⚠ <b>MQTTブローカーと切断中</b>
-          <span>車両の表示は最新ではありません。送った命令は再接続まで車両に届きません。</span>
+          <span>命令は再接続まで車両に届きません。</span>
         </div>
       )}
       {errs.map((v) => (
@@ -205,7 +205,7 @@ function ConnPop() {
         ))}
       </div>
       <button type="button" className="text-blue-600 hover:underline" onClick={() => { closePop(); nav('/settings/system'); }}>
-        システム情報を見る →
+        システム情報を見る
       </button>
     </div>
   );
@@ -252,7 +252,6 @@ function BellPop() {
               </div>
               <div className="text-xs text-slate-500">
                 {fmtDT(n.at)}
-                {n.action && ' ・ 対応するまで表示されます'}
               </div>
             </button>
           ))}
@@ -320,7 +319,7 @@ function VehPop({ id }: { id: string }) {
         <span>{fmtNum(v.speed, 1, ' m/s')}</span>
         <span>自己位置 {v.loc == null ? '—' : `${Math.round(v.loc * 100)}%`}</span>
       </div>
-      <div className="text-xs">{t ? `📦 ${t.title}（進捗 ${fmtPct(t.progress)}）` : 'タスクなし'}</div>
+      <div className="text-xs">{t ? `${t.title}（進捗 ${fmtPct(t.progress)}）` : 'タスクなし'}</div>
       {v.err && <div className="rounded bg-red-50 p-1.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">{ERR[v.err.code] ?? v.err.code}: {v.err.reason}</div>}
       <div className="flex gap-2 pt-1">
         <Btn size="sm" variant="pri" onClick={() => openVehicle(v.id)}>

@@ -16,7 +16,7 @@ export function SettingApprovals() {
   const { rid } = useParams();
   if (rid?.startsWith('direct-')) {
     const item = settingItem(rid.slice('direct-'.length));
-    if (!item || item.rank > 2) return <NotFound text="この項目は、申請なしでは変更できません（L3 は管理者でも申請と 2 人の承認が必要です）。" />;
+    if (!item || item.rank > 2) return <NotFound text="L3 の項目は申請が必要です。" />;
     return <ChangeView key={rid} item={item} />;
   }
   if (rid) {
@@ -47,7 +47,7 @@ function ApprovalList() {
   const history = s.requests.filter((r) => !isOpenReq(r)).slice(0, 50);
   return (
     <div className="space-y-3">
-      <Card title={<>申請の承認 <span className="text-xs font-normal text-slate-500">申請はすべての管理者に届きます。承認した管理者だけが、サインして変更できます</span></>}>
+      <Card title="申請の承認">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
             <tr>
@@ -115,7 +115,7 @@ function ApprovalList() {
         </table>
       </Card>
 
-      <Card title={<>変更の記録 <span className="text-xs font-normal text-slate-500">だれがサインして変更したか、不承認・取り下げも残ります（新しい順に 50 件）</span></>}>
+      <Card title={<>変更の記録 <span className="text-xs font-normal text-slate-500">新しい順に 50 件</span></>}>
         {!history.length ? (
           <div className="p-6 text-center text-sm text-slate-400">まだ記録はありません</div>
         ) : (
@@ -155,7 +155,7 @@ function ApprovalList() {
                         ))
                       : '—'}
                   </td>
-                  <td className="py-2 pr-4">{r.signature ? <span className="font-semibold">✍ {r.signature}</span> : '—'}</td>
+                  <td className="py-2 pr-4">{r.signature ? <span className="font-semibold">{r.signature}</span> : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -180,7 +180,7 @@ function RequestDetail({ r, item }: { r: ChangeRequest; item: SettingItem }) {
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">影響：{item.scope}</span>
         </div>
       </FormRow>
-      <FormRow label={item.type === 'number' ? '数値' : '変更内容'} hint="申請したときの値 → 希望する値">
+      <FormRow label={item.type === 'number' ? '数値' : '変更内容'} >
         <ValueInput item={item} cur={r.cur} value={r.value} readOnly />
       </FormRow>
       <FormRow label="理由">
@@ -199,7 +199,7 @@ function RequestDetail({ r, item }: { r: ChangeRequest; item: SettingItem }) {
       {r.pledgedAt && (
         <FormRow label="誓約">
           <div className="pt-1 text-sm">
-            ✔ 3 項目すべてに同意済み <span className="text-xs text-slate-500">（{fmtDT(r.pledgedAt)}）</span>
+            3 項目すべてに同意済み <span className="text-xs text-slate-500">（{fmtDT(r.pledgedAt)}）</span>
           </div>
         </FormRow>
       )}
@@ -232,10 +232,10 @@ function ReviewView({ r, item }: { r: ChangeRequest; item: SettingItem }) {
   };
 
   let state: ReactNode = null;
-  if (r.status === 'PENDING' && r.requester === me) state = '自分の申請は承認・不承認できません。ほかの管理者の承認を待っています。';
-  else if (r.status === 'PENDING' && reviewed) state = `承認しました（承認 ${ok.length}/${need}）。ほかの管理者の承認を待っています。`;
-  else if (r.status === 'APPROVED') state = `承認がそろいました。承認した管理者（${ok.map((v) => v.name).join('、')}）が変更します。`;
-  else if (r.status !== 'PENDING') state = 'この申請の処理は終わっています。';
+  if (r.status === 'PENDING' && r.requester === me) state = '自分の申請は承認・不承認できません。';
+  else if (r.status === 'PENDING' && reviewed) state = `承認済み（${ok.length}/${need}）`;
+  else if (r.status === 'APPROVED') state = `変更は ${ok.map((v) => v.name).join('、')} が行います。`;
+  else if (r.status !== 'PENDING') state = '処理済みの申請です。';
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_394px] items-start gap-3">
@@ -263,7 +263,7 @@ function ReviewView({ r, item }: { r: ChangeRequest; item: SettingItem }) {
           {/* 【仮】デモ中だけ：ほかの管理者の承認を試す */}
           {s.demo && r.status === 'PENDING' && ok.length < need && (
             <Btn size="sm" onClick={() => demoApproveAs(r.id)}>
-              【仮】ほかの管理者として承認
+              【仮】他の管理者として承認
             </Btn>
           )}
           <div className="flex-1" />
@@ -333,10 +333,10 @@ function ChangeView({ item, req }: { item: SettingItem; req?: ChangeRequest }) {
                   <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">影響：{item.scope}</span>
                 </div>
               </FormRow>
-              <FormRow label={item.type === 'number' ? '数値' : '変更内容'} hint="変更前 → 変更後" required>
+              <FormRow label={item.type === 'number' ? '数値' : '変更内容'} required>
                 <ValueInput item={item} cur={cur} value={value} onChange={setValue} />
               </FormRow>
-              <FormRow label="変更の理由" hint="任意。変更の記録に残ります">
+              <FormRow label="変更の理由" hint="任意">
                 <textarea rows={2} className={cx(inputCls, 'block resize-none rounded-lg px-3 py-2')} placeholder="例：繁忙期のため" value={reason} onChange={(e) => setReason(e.target.value)} />
               </FormRow>
             </>
@@ -346,10 +346,9 @@ function ChangeView({ item, req }: { item: SettingItem; req?: ChangeRequest }) {
               申請のあとに値が変わっています（今の値：{fmtSetting(item.key, cur)}）。変更すると {fmtSetting(item.key, req.value)} になります。
             </div>
           )}
-          <FormRow label="確認" hint="反映する前の最終確認">
+          <FormRow label="確認">
             <div className="rounded-lg border-2 border-blue-200 bg-blue-50 px-4 py-3 text-sm dark:border-blue-900 dark:bg-blue-950/40">
               {item.label}：{fmtSetting(item.key, cur)} → <b className="text-blue-700 dark:text-blue-300">{newValue.trim() ? fmtSetting(item.key, newValue.trim()) : '（未入力）'}</b>
-              <div className="mt-1 text-xs text-slate-500">{RANKS[item.rank].reflect}</div>
             </div>
           </FormRow>
           <FormRow label="サイン" hint="確認のため、あなたのユーザー名を入力してください" required>
@@ -361,22 +360,17 @@ function ChangeView({ item, req }: { item: SettingItem; req?: ChangeRequest }) {
           </FormRow>
           {open && (
             <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              この項目には処理中の申請があります（{open.requester} さん）。先に申請を処理してください。
+              この項目には処理中の申請があります（{open.requester} さん）。
             </div>
           )}
         </div>
         <div className="flex items-center gap-3 px-5 py-3.5">
-          <div className="text-xs leading-relaxed text-slate-500">
-            サインした人の名前と日時が、変更の記録に残ります。
-            <br />
-            管理者と申請者に、変更したことが通知されます。
-          </div>
           <div className="flex-1" />
           <Btn variant="ghost" onClick={() => nav(LIST)}>
             キャンセル
           </Btn>
           <Btn variant="pri" className="px-8 py-2" disabled={busy || !signedOk || !!err || !!open} title={err ?? (!signedOk ? 'サインを入力してください' : undefined)} onClick={run}>
-            ✍ サインして変更する
+            サインして変更する
           </Btn>
         </div>
       </Card>
@@ -397,9 +391,7 @@ function SidePanel({ r, rank, direct }: { r?: ChangeRequest; rank: 1 | 2 | 3; di
   const block = 'border-t border-slate-100 py-3 dark:border-slate-800';
   return (
     <Card title="承認のルール" bodyClass="px-5 py-4">
-      {direct ? (
-        <div className="pb-3 text-sm leading-relaxed">管理者は、L1・L2 の項目を申請なしで変更できます。変更はサインして行い、変更の記録に残ります。</div>
-      ) : (
+      {direct ? null : (
         <div className="pb-3">
           <div className="mb-1 text-xs text-slate-500">必要な承認</div>
           <div className="font-bold">{RANKS[rank].need}</div>
@@ -422,13 +414,13 @@ function SidePanel({ r, rank, direct }: { r?: ChangeRequest; rank: 1 | 2 | 3; di
           </div>
         </div>
       )}
-      <div className={block}>
-        <div className="mb-1 text-xs text-slate-500">反映のしかた</div>
+      <div className={cx(block, direct && 'border-t-0 pt-0')}>
+        <div className="mb-1 text-xs text-slate-500">反映方法</div>
         <div className="text-sm leading-relaxed">{RANKS[rank].reflect}</div>
       </div>
       <div className={block}>
         <div className="mb-1 text-xs text-slate-500">変更できる人</div>
-        <div className="text-sm leading-relaxed">{direct ? '管理者（サインが必要）' : 'この申請を承認した管理者のうち、だれか 1 人（サインが必要）'}</div>
+        <div className="text-sm leading-relaxed">{direct ? '管理者（サインが必要）' : '承認した管理者のうち 1 人（サインが必要）'}</div>
       </div>
       {!direct && rank === 3 && (
         <div className={block}>

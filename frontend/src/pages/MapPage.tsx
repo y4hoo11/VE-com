@@ -14,7 +14,7 @@ export function MapPage() {
         title={
           <>
             地図
-            <select className={cx(inputCls, 'w-56 font-normal')} defaultValue="warehouse_map" onChange={() => toast('地図の切り替えは未対応です（PC1 側の地図と合わせる仕組みが必要）', 'warn')}>
+            <select className={cx(inputCls, 'w-56 font-normal')} defaultValue="warehouse_map" onChange={() => toast('地図の切り替えは未対応です', 'warn')}>
               <option value="warehouse_map">warehouse_map（使用中）</option>
               <option value="demo_map">demo_map</option>
             </select>
@@ -28,22 +28,18 @@ export function MapPage() {
         <Card title="地図の情報" bodyClass="p-4">
           <Kv
             rows={[
-              ['ファイル', 'map/warehouse_map.yaml'],
-              ['大きさ', '16m × 10m（320 × 200 px）'],
-              ['解像度', '0.05 m/px'],
-              ['原点', '(-5.0, -5.0)'],
+              ['大きさ', '16m × 10m'],
             ]}
           />
-          <div className="mt-2 text-xs text-slate-400">※ いまは簡略図を表示しています。ROS 側と地図を合わせたら、PGM 画像を描く形に切り替えます。</div>
         </Card>
         <Card
           title={
             <>
-              地点<span className="text-xs font-normal text-slate-500">waypoints.yaml ・ {WAYPOINTS.length}件</span>
+              地点<span className="text-xs font-normal text-slate-500">{WAYPOINTS.length}件</span>
             </>
           }
           right={
-            <Btn size="sm" admin disabled title="将来対応">
+            <Btn size="sm" admin disabled title="未対応">
               ＋ 追加
             </Btn>
           }
@@ -72,7 +68,6 @@ export function MapPage() {
               </button>
             );
           })}
-          <div className="p-4 text-xs text-slate-400">地点の追加・編集は将来対応です。PC1 の waypoints.yaml に反映する方法を決めてから作ります。</div>
         </Card>
       </div>
     </div>

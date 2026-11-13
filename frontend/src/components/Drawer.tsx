@@ -108,7 +108,7 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
           )}
           {v.err.code === 'LOCALIZATION_LOST' && (
             <Btn size="sm" op className="mt-2" disabled={!demo} title={naTitle} onClick={() => startMapMode('pose', v.id)}>
-              🎯 現在地を設定する {!demo && <Na />}
+              現在地を設定する {!demo && <Na />}
             </Btn>
           )}
         </div>
@@ -141,20 +141,20 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             </div>
             <Bar value={t.progress} className="h-2" />
             <div className="text-xs">
-              {v.paused ? '⏸ 一時停止中' : v.phase ? PHASE[v.phase] : ''} ・ 進捗 {fmtPct(t.progress)}
+              {v.paused ? '一時停止中' : v.phase ? PHASE[v.phase] : ''} ・ 進捗 {fmtPct(t.progress)}
             </div>
             <div className="flex flex-wrap gap-2">
               {v.paused ? (
                 <Btn size="sm" variant="pri" op disabled={!demo} title={naTitle} onClick={() => resume(v.id)}>
-                  ▶ 再開 {!demo && <Na />}
+                  再開 {!demo && <Na />}
                 </Btn>
               ) : (
                 <Btn size="sm" op disabled={!demo} title={naTitle} onClick={() => pause(v.id)}>
-                  ⏸ 一時停止 {!demo && <Na />}
+                  一時停止 {!demo && <Na />}
                 </Btn>
               )}
               <Btn size="sm" op disabled={!demo} title={naTitle} onClick={() => confirmLoad(v.id)}>
-                ✓ 積み降ろし完了 {!demo && <Na />}
+                積み降ろし完了 {!demo && <Na />}
               </Btn>
               <Btn size="sm" variant="dangerO" op onClick={() => askCancel(t.id)}>
                 中止…
@@ -170,17 +170,14 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
         <Section title="移動の指示">
           <div className="flex flex-wrap gap-2">
             <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => startMapMode('goto', v.id)}>
-              📍 地点へ移動 {!demo && <Na />}
+              地点へ移動 {!demo && <Na />}
             </Btn>
             <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => askHome(v.id)}>
-              🏠 ホームへ戻る {!demo && <Na />}
+              ホームへ戻る {!demo && <Na />}
             </Btn>
             <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => startMapMode('pose', v.id)}>
-              🎯 現在地を設定 {!demo && <Na />}
+              現在地を設定 {!demo && <Na />}
             </Btn>
-          </div>
-          <div className="mt-1.5 text-xs text-slate-400">
-            {demo ? 'デモモードなので、実機には送られません' : '移動の指示は、バックエンドに車両への命令API（GOTO・RETURN_HOME・SET_POSE）を追加してから使えるようになります'}
           </div>
         </Section>
       )}
@@ -196,7 +193,7 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
 
       {inDrawer && (
         <button type="button" className="block text-sm text-blue-600 hover:underline" onClick={() => nav(`/vehicles/${v.id}`)}>
-          カメラ映像・詳細ページを開く →
+          カメラ映像・詳細ページを開く
         </button>
       )}
     </>
@@ -226,7 +223,7 @@ function TaskBody({ id }: { id: string }) {
         <div className="space-y-1.5 rounded-lg bg-blue-50 p-3 dark:bg-blue-950/50">
           <Bar value={t.progress} className="h-2" />
           <div className="text-xs">
-            {v?.status === 'ERROR' ? '⚠ 車両が異常で止まっています' : v?.paused ? '⏸ 一時停止中' : v?.phase ? PHASE[v.phase] : t.status === 'ASSIGNED' ? '出発待ち' : '実行中'} ・ 進捗 {fmtPct(t.progress)}
+            {v?.status === 'ERROR' ? '⚠ 車両が異常で止まっています' : v?.paused ? '一時停止中' : v?.phase ? PHASE[v.phase] : t.status === 'ASSIGNED' ? '出発待ち' : '実行中'} ・ 進捗 {fmtPct(t.progress)}
           </div>
         </div>
       )}
@@ -313,13 +310,11 @@ function LogBody({ id }: { id: number }) {
           ['ログID', l.id],
         ]}
       />
-      <Section title="詳細データ（details）">
+      <Section title="詳細データ">
         {l.details ? (
           <pre className="overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-green-300">{JSON.stringify(l.details, null, 2)}</pre>
         ) : (
-          <div className="text-sm text-slate-400">
-            なし <Tag>details は空</Tag>
-          </div>
+          <div className="text-sm text-slate-400">なし</div>
         )}
       </Section>
     </>

@@ -294,14 +294,14 @@ export function ValueInput({ item, cur, value, onChange, readOnly }: { item: Set
 export function RankLegend({ withL4 }: { withL4?: boolean }) {
   const td = 'py-2 pr-4 align-top';
   return (
-    <Card title={<>危険度（ランク）について <span className="text-xs font-normal text-slate-500">設定項目は、間違えたときの危険の大きさでランク分けしています</span></>}>
+    <Card title="危険度（ランク）について">
       <table className="w-full text-sm">
         <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
           <tr>
             <th className="w-28 px-4 py-2">ランク</th>
             <th className="py-2">基準</th>
             <th className="py-2">必要な承認</th>
-            <th className="py-2 pr-4">反映のしかた</th>
+            <th className="py-2 pr-4">反映方法</th>
           </tr>
         </thead>
         <tbody>
@@ -328,9 +328,7 @@ export function RankLegend({ withL4 }: { withL4?: boolean }) {
         </tbody>
       </table>
       <div className="px-4 py-3 text-xs leading-relaxed text-slate-500">
-        管理者は、L1・L2 の項目なら申請なしで変更できます（サインが必要で、変更の記録が残ります）。L3 は管理者でも申請と 2 人の承認が必要です。
-        <br />
-        L2・L3 は、承認の前に「現在の値 → 新しい値」を確認画面で表示します。
+        管理者は L1・L2 を申請なしで変更できます。L3 は管理者でも申請が必要です。
       </div>
     </Card>
   );

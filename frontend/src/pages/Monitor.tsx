@@ -89,11 +89,11 @@ export function Monitor() {
                 {t ? (
                   <>
                     <div className="mb-1 truncate">
-                      📦 {t.title} <span className="text-slate-500">{t.start} → {t.target}</span>
+                      {t.title} <span className="text-slate-500">{t.start} → {t.target}</span>
                     </div>
                     <Bar value={t.progress} />
                     <div className="mt-1 text-slate-500">
-                      {v.paused ? '⏸ 一時停止中' : v.phase ? PHASE[v.phase] : TS[t.status]} ・ 進捗 {fmtPct(t.progress)}
+                      {v.paused ? '一時停止中' : v.phase ? PHASE[v.phase] : TS[t.status]} ・ 進捗 {fmtPct(t.progress)}
                     </div>
                   </>
                 ) : v.mode === 'GOTO' ? (
@@ -126,7 +126,7 @@ export function Monitor() {
         title="最新のログ"
         right={
           <Link to="/logs" className="text-sm font-normal text-blue-600 hover:underline">
-            記録をすべて見る →
+            記録をすべて見る
           </Link>
         }
         bodyClass="overflow-auto"

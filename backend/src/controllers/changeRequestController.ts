@@ -23,7 +23,7 @@ export const SETTING_ITEMS: Record<string, Item> = {
   battMin: { label: '割り当てない残量（充電に戻る基準）', rank: 2, dbKey: 'ops.batt_min', def: '20', num: { min: 10, max: 50, int: true } },
   hours: { label: '稼働時間帯（走行を許可する時間）', rank: 2, dbKey: 'ops.operating_hours', def: '終日' },
   waypoints: { label: '登録地点（経由地・目的地）の追加・位置変更', rank: 2, dbKey: 'map.waypoints_change', def: '現在の登録地点' },
-  maxSpeed: { label: '最高速度（agv.max_speed）', rank: 3, dbKey: 'agv.max_speed_kmh', def: '5', num: { min: 1, max: 6 } }, // km/h（以前の agv.max_speed は m/s なので使わない）
+  maxSpeed: { label: '最高速度', rank: 3, dbKey: 'agv.max_speed_kmh', def: '5', num: { min: 1, max: 6 } }, // km/h（以前の agv.max_speed は m/s なので使わない）
   obstacle: { label: '障害物検知で減速・停止を始める距離', rank: 3, dbKey: 'agv.obstacle_distance', def: '0.45', num: { min: 0.2, max: 2 } },
   keepout: { label: '立入禁止エリアの追加・削除', rank: 3, dbKey: 'map.keepout_zones', def: '未設定' },
   map: { label: '使用する地図の切り替え', rank: 3, dbKey: 'map.active', def: 'warehouse_map' },

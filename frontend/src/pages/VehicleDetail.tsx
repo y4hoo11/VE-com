@@ -43,7 +43,7 @@ export function VehicleDetail() {
           <Card
             title={
               <>
-                カメラ映像<span className="text-xs font-normal text-slate-500">マーカー解析つき（PC1 が配信する MJPEG）</span>
+                カメラ映像
               </>
             }
           >
@@ -66,10 +66,6 @@ export function VehicleDetail() {
                 <Key k="S" />
                 <Key k="D" />
               </div>
-              <p className="m-0 text-sm text-slate-500">
-                WASD での遠隔操縦は、通信仕様（docs/agv_protocol.md）に Web から操縦する命令がまだ無いので未実装です。
-                速度の上限や「押している間だけ動く」方式など、安全面をチームで決めてから追加します。
-              </p>
             </div>
           </Card>
           <Card title="この車両のログ">
@@ -114,9 +110,9 @@ function Key({ k }: { k: string }) {
 // カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL を保存する仕組みは未対応
 function Camera({ v }: { v: Vehicle }) {
   const msg = !v.camera
-    ? '📷 カメラ映像のURLが登録されていません（URL を保存する仕組みは未対応）'
+    ? 'カメラ映像が登録されていません'
     : !v.online
-      ? '📷 映像を受信できません（車両がオフライン）'
+      ? '映像を受信できません（車両がオフライン）'
       : null;
   if (msg) {
     return <div className="flex aspect-video items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;
