@@ -328,10 +328,7 @@ function VehPop({ id }: { id: string }) {
           詳しく見る
         </Btn>
         <Btn size="sm" onClick={() => { closePop(); nav(`/vehicles/${v.id}`); }}>
-          詳細・操縦
-        </Btn>
-        <Btn size="sm" onClick={() => { closePop(); nav(`/emergency/${v.id}`); }}>
-          カメラ・緊急
+          カメラ・操縦
         </Btn>
         <div className="flex-1" />
         <Btn size="sm" variant="danger" disabled={!v.online || v.status === 'ERROR'} onClick={() => estop(v.id)}>

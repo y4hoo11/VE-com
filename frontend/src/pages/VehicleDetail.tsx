@@ -1,10 +1,11 @@
-// 車両詳細ページ：カメラを大きく映す。手動操縦（WASD）もここに置く
+// 車両詳細ページ：カメラと物理センサーを並べて映す。手動操縦（WASD）もここに置く
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { canOperate, closeDrawer, manualDrive, manualDriveEnd, manualDriveStart, nav, openLog, S, toast, useStore, veh } from '../store/store';
 import type { Vehicle } from '../store/data';
 import { VehiclePanel } from '../components/Drawer';
 import { MapView } from '../components/MapView';
+import { SonarView } from '../components/SonarView';
 import { Btn, Card, LvChip, Tag, VChip } from '../components/ui';
 import { cx, fmtT } from '../components/uiUtils';
 
@@ -39,8 +40,10 @@ export function VehicleDetail() {
         <span className="ml-auto text-xs text-slate-500">SPACE キーでも緊急停止できます</span>
       </div>
 
-      <div className="grid grid-cols-[1fr_420px] gap-3">
-        <div className="space-y-3">
+      <div className="space-y-3">
+        {/* 上段：カメラと、その横に物理センサー（操縦しながら両方を見られるように） */}
+        {/* 高さは画面の 4 割ほどに抑える（下の手動操縦・状態が、スクロールしなくても見え始めるように） */}
+        <div className="grid h-[42vh] min-h-72 grid-cols-[minmax(0,1fr)_360px] gap-3">
           <Card
             title={
               <>
@@ -50,7 +53,32 @@ export function VehicleDetail() {
           >
             <Camera v={v} />
           </Card>
-          <ManualDrive key={v.id} v={v} />
+          <Card
+            title={
+              <>
+                物理センサー<span className="text-xs font-normal text-slate-500">アラウンドビュー</span> <Tag tone="amber">デモ表示</Tag>
+              </>
+            }
+            bodyClass="min-h-0 flex-1"
+            className="flex flex-col"
+          >
+            <SonarView online={v.online} />
+          </Card>
+        </div>
+
+        <ManualDrive key={v.id} v={v} />
+
+        {/* 下段：状態と操作（位置・自己位置の確かさなど）と、その横に地図 */}
+        <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-3">
+          {/* 横に広いので、中身を 2 列に流す（1 列だと縦に長くなりすぎる） */}
+          <Card title="状態と操作" bodyClass="columns-2 gap-8 p-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
+            <VehiclePanel v={v} />
+          </Card>
+          <Card title="位置" bodyClass="relative min-h-64 flex-1" className="flex flex-col">
+            <MapView mapKey="detail" focusId={v.id} />
+          </Card>
+        </div>
+
           <Card title="この車両のログ">
             <table className="w-full text-sm">
               <tbody>
@@ -71,16 +99,6 @@ export function VehicleDetail() {
               </tbody>
             </table>
           </Card>
-        </div>
-
-        <div className="space-y-3">
-          <Card title="状態と操作" bodyClass="p-4 space-y-4">
-            <VehiclePanel v={v} />
-          </Card>
-          <Card title="位置" bodyClass="relative h-64">
-            <MapView mapKey="detail" focusId={v.id} />
-          </Card>
-        </div>
       </div>
     </div>
   );
@@ -204,7 +222,7 @@ function ManualDrive({ v }: { v: Vehicle }) {
     <Card
       title={
         <>
-          手動操縦 {S.demo ? <Tag tone="blue">デモ</Tag> : <Tag tone="amber">ROS 側の対応待ち</Tag>}
+          手動操縦 {S.demo && <Tag tone="blue">デモ</Tag>}
         </>
       }
       right={
@@ -254,7 +272,6 @@ function ManualDrive({ v }: { v: Vehicle }) {
               </button>
             ))}
           </div>
-          {!S.demo && <p className="m-0 text-xs text-slate-400">命令（MANUAL_DRIVE）は送られますが、ROS 側が受け取る処理を作るまで実機は動きません。</p>}
         </div>
       </div>
     </Card>
@@ -277,10 +294,10 @@ function Camera({ v }: { v: Vehicle }) {
       ? '📷 映像を受信できません（車両がオフライン）'
       : null;
   if (msg) {
-    return <div className="flex aspect-video items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;
+    return <div className="flex h-full items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;
   }
   return (
-    <div className="relative aspect-video overflow-hidden rounded-b-xl bg-slate-900">
+    <div className="relative h-full overflow-hidden rounded-b-xl bg-slate-900">
       <img src={v.camera} alt={`${v.name} のカメラ映像`} className="h-full w-full object-contain" />
       <div className="absolute top-2 left-3 flex items-center gap-2 text-xs font-bold text-white">
         <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> LIVE ・ {v.name}

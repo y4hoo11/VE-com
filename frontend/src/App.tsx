@@ -12,7 +12,6 @@ import { DrawerHost } from './components/Drawer';
 import { ModalHost } from './components/Modals';
 import { Monitor } from './pages/Monitor';
 import { VehicleDetail } from './pages/VehicleDetail';
-import { EmergencyPage } from './pages/EmergencyPage';
 import { Tasks } from './pages/Tasks';
 import { Logs } from './pages/Logs';
 import { MapPage } from './pages/MapPage';
@@ -81,7 +80,6 @@ function Main() {
             <Routes>
               <Route path="/" element={<Monitor />} />
               <Route path="/vehicles/:id" element={<VehicleDetail />} />
-              <Route path="/emergency/:id" element={<EmergencyPage />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/logs" element={<Logs />} />
               <Route path="/map" element={<MapPage />} />
