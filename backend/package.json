@@ -6,7 +6,11 @@
     "build": "tsc",
     "start": "node dist/app.js",
     "user:create": "tsx prisma/createUser.ts",
-    "fake-pc1": "tsx scripts/fake-pc1.ts"
+    "fake-pc1": "tsx scripts/fake-pc1.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "db:seed": "prisma db seed",
+    "db:baseline": "prisma migrate resolve --applied 20261026011646_init"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

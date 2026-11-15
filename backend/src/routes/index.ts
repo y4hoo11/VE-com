@@ -5,7 +5,7 @@ import { getVehicles, getVehicleById, createVehicle, updateVehicle, deleteVehicl
 import { getTasks, getTaskById, createTask, assignTask, deleteTask, updateTask } from '../controllers/taskController';
 import { getLogs } from '../controllers/logController';
 import { login } from '../controllers/authController';
-import { getSettings, updateSettings } from '../controllers/settingsController';
+import { getSettings, getChangeRequests, createChangeRequest, reviewChangeRequest, withdrawChangeRequest, applyChangeRequest, directChange } from '../controllers/changeRequestController';
 import { getUsers, createUser, updateUser, deleteUser, getMe, changeMyPassword } from '../controllers/userController';
 import { requireAuth, requireRole } from '../middleware/auth';
 
@@ -46,8 +46,15 @@ router.patch('/tasks/:id', canOperate, updateTask);
 // ログAPI
 router.get('/logs', getLogs);
 
-// 運行の設定API（読むのは全員、変えるのは ADMIN だけ）
+// 設定API（読むのは全員。変更はサイン付きで、申請・承認を通すか、管理者が L1・L2 を直接変更する）
 router.get('/settings', getSettings);
-router.put('/settings', requireRole(Role.ADMIN), updateSettings);
+router.post('/settings/direct', requireRole(Role.ADMIN), directChange);
+
+// 設定変更の申請API（申請は ADMIN と OPERATOR、承認・変更は ADMIN）
+router.get('/change-requests', getChangeRequests);
+router.post('/change-requests', canOperate, createChangeRequest);
+router.post('/change-requests/:id/review', requireRole(Role.ADMIN), reviewChangeRequest);
+router.post('/change-requests/:id/withdraw', canOperate, withdrawChangeRequest);
+router.post('/change-requests/:id/apply', requireRole(Role.ADMIN), applyChangeRequest);
 
 export default router;

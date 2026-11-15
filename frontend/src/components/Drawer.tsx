@@ -222,9 +222,14 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
       </button>
 
       {inDrawer && (
-        <button type="button" className="block text-sm text-blue-600 hover:underline" onClick={() => nav(`/vehicles/${v.id}`)}>
-          カメラ映像・詳細ページを開く →
-        </button>
+        <div className="space-y-1.5">
+          <button type="button" className="block text-sm text-blue-600 hover:underline" onClick={() => nav(`/vehicles/${v.id}`)}>
+            詳細ページを開く（手動操縦・カメラ映像）→
+          </button>
+          <button type="button" className="block text-sm text-blue-600 hover:underline" onClick={() => nav(`/emergency/${v.id}`)}>
+            カメラ映像・緊急制御画面を開く →
+          </button>
+        </div>
       )}
     </>
   );
