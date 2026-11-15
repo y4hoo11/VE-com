@@ -6,7 +6,8 @@ import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import { approvalsOf, fmtSetting, isOpenReq, needApprovals, RANKS, SETTING_ITEMS, settingItem, valueError, type ChangeRequest, type SettingItem } from '../store/data';
 import { applyRequest, demoApproveAs, directChange, nav, reviewRequest, useStore } from '../store/store';
-import { Btn, Card, cx, fmtDT, FormRow, inputCls, PersonIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput } from '../components/ui';
+import { Btn, Card, FormRow, inputCls, PersonIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput } from '../components/ui';
+import { cx, fmtDT } from '../components/uiUtils';
 
 const LIST = '/settings/approvals';
 const openFor = (reqs: ChangeRequest[], key: string) => reqs.find((r) => r.key === key && isOpenReq(r));

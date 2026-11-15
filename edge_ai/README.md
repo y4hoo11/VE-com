@@ -165,7 +165,7 @@ teleop で走らせるときは PC1 の Nav2 を止めておく（両方から /
 
 | トピック | 型 | 出す → 受ける |
 |---|---|---|
-| `/cmd_vel` | geometry_msgs/Twist | Nav2（velocity_smoother）→ serial_bridge |
+| `/cmd_vel` | geometry_msgs/Twist | Nav2（velocity_smoother）→ serial_bridge。手動操縦（MANUAL_DRIVE）のときは mission_manager → serial_bridge |
 | `/scan` | sensor_msgs/LaserScan | rplidar_ros → Nav2・AMCL・serial_bridge（安全ガード） |
 | `/odom` + TF `odom→base_link` | nav_msgs/Odometry | serial_bridge → Nav2・AMCL |
 | TF `map→odom` | | AMCL |

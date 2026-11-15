@@ -2,8 +2,10 @@
 import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { approvalsOf, fmtSetting, isOpenReq, needApprovals, RANKS, REQ_STATUS, SETTING_ITEMS, settingItem, ST, valueError, type ChangeRequest, type Rank, type SettingItem } from '../store/data';
+import { API_ORIGIN } from '../services/api';
 import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, reqNotes, restartDemo, savePrefs, setDemoMode, setTestOnline, submitChangeRequest, toast, useStore, withdrawRequest } from '../store/store';
-import { Btn, Card, cx, fmtDT, fmtT, FormRow, inputCls, Kv, LockIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
+import { Btn, Card, FormRow, inputCls, Kv, LockIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
+import { cx, fmtDT, fmtT } from '../components/uiUtils';
 import { SettingApprovals } from './SettingApprovals';
 
 // 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める
@@ -361,8 +363,8 @@ function System() {
   const ok = (b: boolean, t = '正常', f = '切断') => <span className={b ? 'text-green-600' : 'font-bold text-red-600'}>● {b ? t : f}</span>;
   return (
     <div className="space-y-3">
-      <Card title={<>接続 <span className="text-xs font-normal text-slate-500">接続先の変更はサーバーの .env で行います（画面からは変えません）</span></>} bodyClass="px-5">
-        <Row label="ブラウザ ⇔ サーバー" hint="Socket.IO">{ok(s.server, '接続中')}</Row>
+      <Card title={<>接続 <span className="text-xs font-normal text-slate-500">接続先の変更は .env で行います（画面からは変えません）</span></>} bodyClass="px-5">
+        <Row label="ブラウザ ⇔ サーバー" hint={`Socket.IO ・ ${API_ORIGIN}（frontend/.env の VITE_API_ORIGIN）`}>{ok(s.server, '接続中')}</Row>
         <Row label="サーバー ⇔ MQTTブローカー" hint="mqtt://localhost:1883（Mosquitto）">{ok(s.mqtt, '接続中')}</Row>
         <Row label="データベース" hint="PostgreSQL agv_warehouse">{ok(s.loaded, '正常', '取得できません')}</Row>
       </Card>

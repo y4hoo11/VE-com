@@ -1,15 +1,19 @@
 // src/services/socketService.ts
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { VehicleUpdatePayload, LogPayload, SystemStatusPayload } from '../types';
+import { VehicleUpdatePayload, LogPayload, SystemStatusPayload, TaskProgressPayload, VehiclePathPayload } from '../types';
 import { mqttService } from './mqttService';
+import { manualDriveService } from './manualDriveService';
+import { vehicleCommandService } from './vehicleCommandService';
+import { ACK_LOG_PREFIX, emergencyState } from './emergencyState';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel, Role } from '@prisma/client';
 import { authenticate } from '../middleware/auth';
 import type { AuthUser } from '../types/express';
 
 // フロントからのイベントに返す結果（フロントはこれで成功・失敗を表示する）
-type Ack = (result: { ok: boolean; error?: string }) => void;
+// note は、成功したときに操作した人へ伝える補足（例：解除したが一時停止のまま）
+type Ack = (result: { ok: boolean; error?: string; note?: string }) => void;
 
 // イベントのデータから車両IDを安全に取り出す
 const getVehicleId = (data: unknown): string | undefined => {
@@ -24,6 +28,8 @@ class SocketService {
     this.io = new Server(httpServer, {
       cors: { origin: '*' },
     });
+    manualDriveService.start((id, level, msg) => this.recordLog(id, level, msg));
+    vehicleCommandService.start((id, level, msg) => this.recordLog(id, level, msg));
 
     // 接続時にトークンを確認する（フロントは io(url, { auth: { token } }) で送る）。
     // 削除されたユーザーはつながらない（画面はログイン画面に戻る）
@@ -60,6 +66,7 @@ class SocketService {
 
           console.warn(`[緊急] Webからの停止命令を受信: ${vehicleId} (${user.username})`);
           mqttService.sendEmergencyStop(vehicleId);
+          manualDriveService.stopVehicle(vehicleId, '緊急停止');
 
           await this.recordLog(vehicleId, LogLevel.ERROR, `Webから緊急停止を指示しました（操作: ${user.username}）`);
 
@@ -77,8 +84,7 @@ class SocketService {
         }
       });
 
-      // Web画面の「確認」ボタン等による緊急状態の解除
-      // 緊急状態の解除（ADMIN と OPERATOR だけ。緊急停止は安全のため VIEWER も押せる）
+      // Web画面の「確認」ボタン等による緊急状態の解除（ADMIN と OPERATOR だけ。緊急停止は安全のため VIEWER も押せる）
       socket.on('acknowledge_emergency', async (data: unknown, ack?: Ack) => {
         if (user.role === Role.VIEWER) return ack?.({ ok: false, error: '閲覧のみの権限では解除できません' });
         const vehicleId = getVehicleId(data);
@@ -91,9 +97,18 @@ class SocketService {
             return ack?.({ ok: false, error: 'この車両は緊急状態ではありません' });
           }
 
+          // PC1 は、緊急停止の前に受けていた移動（タスク・地点へ移動）を覚えていて、解除すると続きを走り出す。
+          // 解除したとたんに動かないよう、やりかけの移動があるときは先に一時停止を送る。
+          // 人が周りを確かめて「再開」を押すと、続きを走る。
+          // やりかけがあるか分からないとき（telemetry をまだ受け取っていない）も、安全側で一時停止にする
+          const held = mqttService.hasPendingMove(vehicleId) !== false;
+          if (held) mqttService.sendVehicleCommand(vehicleId, { action: 'PAUSE' });
+
           // 車両（ラズパイ・PC1）にも解除を送る（docs/agv_protocol.md 2-1）
           // これを送らないと、Webで解除しても実機は止まったまま動かない
           mqttService.sendVehicleCommand(vehicleId, { action: 'CLEAR_EMERGENCY' });
+          // 緊急停止など「解除が必要な原因」だけ忘れる（自己位置の喪失など、まだ続いている原因は残す）
+          emergencyState.clearLatched(vehicleId);
 
           await prisma.vehicle.update({
             where: { id: vehicleId },
@@ -106,7 +121,8 @@ class SocketService {
             emergencyReason: null,
           });
 
-          await this.recordLog(vehicleId, LogLevel.INFO, `緊急状態を解除しました（操作: ${user.username}）`);
+          // 文言は emergencyState.ts の ACK_LOG_PREFIX と合わせる（再起動後に「解除済みか」をログから判断するため）
+          await this.recordLog(vehicleId, LogLevel.INFO, `${ACK_LOG_PREFIX}（${held ? '移動は一時停止のまま・' : ''}操作: ${user.username}）`);
 
           if (!mqttService.isConnected()) {
             return ack?.({
@@ -114,15 +130,49 @@ class SocketService {
               error: 'MQTTブローカーに接続されていないため、解除命令がまだ車両に届いていません',
             });
           }
-          ack?.({ ok: true });
+          ack?.(held ? { ok: true, note: '移動は一時停止のままです。周りを確認してから「▶ 再開」を押すと、続きを走ります' } : { ok: true });
         } catch (e) {
           console.error('緊急解除の処理エラー:', e);
           ack?.({ ok: false, error: '緊急状態の解除に失敗しました' });
         }
       });
 
+      // 運行操作（一時停止・再開、積み降ろし完了、地点へ移動、ホームへ戻る、現在地の設定）
+      // data: { vehicleId, type, target? | x?, y?, theta? }
+      socket.on('vehicle_command', async (data: unknown, ack?: Ack) => {
+        try {
+          ack?.(await vehicleCommandService.handle(user, data));
+        } catch (e) {
+          console.error('運行操作の処理エラー:', e);
+          ack?.({ ok: false, error: '命令を送れませんでした' });
+        }
+      });
+
+      // 手動操縦（WASD）。「操縦を始める」〜「操縦をやめる」が 1 回の操縦（ログはこの開始と終了だけ）
+      socket.on('manual_drive_start', async (data: unknown, ack?: Ack) => {
+        try {
+          ack?.(await manualDriveService.begin(user, socket.id, data));
+        } catch (e) {
+          console.error('手動操縦の開始エラー:', e);
+          ack?.({ ok: false, error: '手動操縦を始められませんでした' });
+        }
+      });
+      socket.on('manual_drive_end', (data: unknown, ack?: Ack) => {
+        ack?.(manualDriveService.finish(socket.id, data));
+      });
+      // 押している間、画面から 0.2 秒ごとに速度が届く
+      socket.on('manual_drive', async (data: unknown, ack?: Ack) => {
+        try {
+          ack?.(await manualDriveService.drive(user, socket.id, data));
+        } catch (e) {
+          console.error('手動操縦の処理エラー:', e);
+          ack?.({ ok: false, error: '手動操縦の命令を送れませんでした' });
+        }
+      });
+
       socket.on('disconnect', () => {
         console.log(`[WebSocket] クライアント切断: ${socket.id}`);
+        manualDriveService.stopBySocket(socket.id); // 操縦中に画面が切れたら止める
       });
     });
   }
@@ -190,10 +240,34 @@ class SocketService {
     }
   }
 
+  // タスクの進捗（PC1 の agv/{id}/task）を知らせる。進捗バー用で、届くたびに送る
+  broadcastTaskProgress(payload: TaskProgressPayload) {
+    if (this.io) {
+      this.io.emit('task:progress', payload);
+    }
+  }
+
+  // Nav2 が計画した経路（PC1 の agv/{id}/path）を知らせる
+  broadcastVehiclePath(payload: VehiclePathPayload) {
+    if (this.io) {
+      this.io.emit('vehicle:path', payload);
+    }
+  }
+
   // ユーザーの追加・変更・削除を知らせる（管理者の画面が一覧を取り直す）
   broadcastUsersChanged() {
     if (this.io) {
       this.io.emit('users:changed');
+    }
+  }
+
+  // 同じアカウントで別の端末がログインした：前の端末に知らせてから切る（画面はログイン画面に戻り、理由を出す）
+  replaceSession(userId: string) {
+    if (!this.io) return;
+    for (const s of this.io.sockets.sockets.values()) {
+      if ((s.data.user as AuthUser | undefined)?.id !== userId) continue;
+      s.emit('session:replaced');
+      s.disconnect(true);
     }
   }
 

@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { Role } from '@prisma/client';
 import { JWT_SECRET } from '../config/auth';
 import { prisma } from '../config/database';
+import { loginSessions } from '../services/loginSessions';
 import type { AuthUser } from '../types/express';
 
 // トークンの中身（ログイン時に authController が発行する）
@@ -11,29 +12,39 @@ interface TokenPayload {
   sub: string; // ユーザーID
   username: string;
   role: Role;
+  sid?: string; // ログインの番号（services/loginSessions.ts）。後からログインすると、前の番号は無効になる
 }
 
-/**
- * トークンを検証してユーザー情報を返す。不正・期限切れなら null
- * HTTP と Socket.IO の両方で使う
- */
-export const verifyToken = (token: string): AuthUser | null => {
+// トークンを検証して中身を返す。不正・期限切れなら null
+const readToken = (token: string): TokenPayload | null => {
   try {
     const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
     if (!payload.sub || !payload.username || !payload.role) return null;
-    return { id: payload.sub, username: payload.username, role: payload.role };
+    return payload;
   } catch {
     return null;
   }
 };
 
 /**
+ * トークンを検証してユーザー情報を返す。不正・期限切れなら null
+ */
+export const verifyToken = (token: string): AuthUser | null => {
+  const p = readToken(token);
+  return p ? { id: p.sub, username: p.username, role: p.role } : null;
+};
+
+/**
  * トークンを検証し、そのユーザーが今も DB にいるか確かめて、最新のユーザー名・権限を返す。
- * 削除されたユーザーは null（トークンの期限内でも使えなくする）。権限の変更もすぐ反映される
+ * HTTP と Socket.IO の両方で使う。次のときは null：
+ *   - 削除されたユーザー（トークンの期限内でも使えなくする）。権限の変更もすぐ反映される
+ *   - 同じアカウントで、後から別の端末がログインした（前の端末のトークン）
  */
 export const authenticate = async (token: string): Promise<AuthUser | null> => {
-  const payload = verifyToken(token);
-  if (!payload) return null;
+  const p = readToken(token);
+  if (!p) return null;
+  if (!loginSessions.isCurrent(p.sub, p.sid)) return null;
+  const payload = { id: p.sub };
   const user = await prisma.user.findUnique({
     where: { id: payload.id },
     select: { id: true, username: true, role: true },

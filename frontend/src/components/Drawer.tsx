@@ -1,6 +1,6 @@
 // 横から出てくるパネル（車両・タスク・ログ）。車両の中身は車両詳細ページでも使う
 import type { ReactNode } from 'react';
-import { ERR, PHASE, wpByName, type Vehicle } from '../store/data';
+import { ERR, PHASE, rosModeText, wpByName, type Vehicle } from '../store/data';
 import {
   askCancel,
   askClear,
@@ -15,17 +15,14 @@ import {
   openVehicle,
   pause,
   resume,
-  NOT_SUPPORTED,
   S,
   startMapMode,
   task,
   useStore,
   veh,
 } from '../store/store';
-import { Bar, Battery, Btn, cx, fmtDT, fmtNum, fmtPct, fmtT, Kv, LvChip, PrioChip, Section, Tag, TChip, TS_DOT, VChip } from './ui';
-
-// バックエンドに命令が無いボタンに付ける印
-const Na = () => <Tag tone="amber">未対応</Tag>;
+import { Bar, Battery, Btn, Kv, LvChip, PrioChip, Section, Tag, TChip, VChip } from './ui';
+import { cx, fmtDT, fmtNum, fmtPct, fmtT, TS_DOT } from './uiUtils';
 
 export function DrawerHost() {
   const s = useStore();
@@ -80,11 +77,22 @@ export function DrawerHost() {
 // 車両（ドロワーと車両詳細ページで共通）
 // ---------------------------------------------------------------
 export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }) {
-  const { demo } = useStore(); // 【仮】デモ中は、まだ実機向けの命令が無いボタンも押せる
-  const naTitle = demo ? undefined : NOT_SUPPORTED;
+  const { demo } = useStore();
   const t = task(v.taskId);
   const vbat = v.vbat == null ? '' : `（${v.vbat.toFixed(2)} V）`;
   const off = !v.online;
+  const rm = rosModeText(v); // PC1 がいま何をしているか
+  // 運行操作を送れないとき（理由をボタンの説明に出す）
+  const ng = off ? 'オフラインの車両には送れません' : v.status === 'ERROR' ? '異常中は送れません（先に緊急状態を解除してください）' : null;
+  const pauseBtn = v.paused ? (
+    <Btn size="sm" variant="pri" op disabled={!!ng} title={ng ?? undefined} onClick={() => resume(v.id)}>
+      ▶ 再開
+    </Btn>
+  ) : (
+    <Btn size="sm" op disabled={!!ng} title={ng ?? undefined} onClick={() => pause(v.id)}>
+      ⏸ 一時停止
+    </Btn>
+  );
 
   return (
     <>
@@ -107,8 +115,8 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             </Btn>
           )}
           {v.err.code === 'LOCALIZATION_LOST' && (
-            <Btn size="sm" op className="mt-2" disabled={!demo} title={naTitle} onClick={() => startMapMode('pose', v.id)}>
-              🎯 現在地を設定する {!demo && <Na />}
+            <Btn size="sm" op className="mt-2" onClick={() => startMapMode('pose', v.id)}>
+              🎯 現在地を設定する
             </Btn>
           )}
         </div>
@@ -126,6 +134,17 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             ['ラズパイ温度', off ? '—' : fmtNum(v.piTemp, 1, ' ℃')],
             ['ESP32 / LiDAR', off ? '—' : `${v.esp32 == null ? '—' : v.esp32 ? '正常' : '異常'} / ${fmtNum(v.lidarHz, 1, ' Hz')}`],
             ['行き先', v.goal ? `${v.goal}${wpByName(v.goal) ? `（${wpByName(v.goal)!.label}）` : ''}` : '—'],
+            [
+              '動作',
+              rm ? (
+                <span className={cx(rm.tone === 'warn' && 'font-bold text-amber-700 dark:text-amber-400')}>
+                  {rm.label}
+                  {rm.note && <span className="font-normal text-slate-500">（{rm.note}）</span>}
+                </span>
+              ) : (
+                '—'
+              ),
+            ],
           ]}
         />
       </Section>
@@ -144,17 +163,15 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
               {v.paused ? '⏸ 一時停止中' : v.phase ? PHASE[v.phase] : ''} ・ 進捗 {fmtPct(t.progress)}
             </div>
             <div className="flex flex-wrap gap-2">
-              {v.paused ? (
-                <Btn size="sm" variant="pri" op disabled={!demo} title={naTitle} onClick={() => resume(v.id)}>
-                  ▶ 再開 {!demo && <Na />}
-                </Btn>
-              ) : (
-                <Btn size="sm" op disabled={!demo} title={naTitle} onClick={() => pause(v.id)}>
-                  ⏸ 一時停止 {!demo && <Na />}
-                </Btn>
-              )}
-              <Btn size="sm" op disabled={!demo} title={naTitle} onClick={() => confirmLoad(v.id)}>
-                ✓ 積み降ろし完了 {!demo && <Na />}
+              {pauseBtn}
+              <Btn
+                size="sm"
+                op
+                disabled={!!ng}
+                title={ng ?? '荷積み・荷降ろしの待ちを終わらせます（PC1 の wait_mode が confirm のとき）'}
+                onClick={() => confirmLoad(v.id)}
+              >
+                ✓ 積み降ろし完了
               </Btn>
               <Btn size="sm" variant="dangerO" op onClick={() => askCancel(t.id)}>
                 中止…
@@ -162,25 +179,35 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
             </div>
           </div>
         ) : (
-          <div className="text-sm text-slate-400">{v.mode === 'GOTO' ? `${v.goal} へ移動中（タスクではない移動）` : 'タスクはありません'}</div>
+          <div className="space-y-2">
+            <div className="text-sm text-slate-400">
+              {v.mode === 'GOTO'
+                ? `${v.goal} へ移動中（タスクではない移動）${v.paused ? ' ・ ⏸ 一時停止中' : ''}`
+                : v.paused
+                  ? '⏸ 一時停止中（「再開」を押すまで、タスクを割り当てても動きません）'
+                  : 'タスクはありません'}
+            </div>
+            {/* 一時停止中は、移動が無くても「再開」を出す（緊急停止の解除のあとなど） */}
+            {(v.mode === 'GOTO' || v.paused) && pauseBtn}
+          </div>
         )}
       </Section>
 
       {S.user.role !== 'VIEWER' && (
         <Section title="移動の指示">
           <div className="flex flex-wrap gap-2">
-            <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => startMapMode('goto', v.id)}>
-              📍 地点へ移動 {!demo && <Na />}
+            <Btn size="sm" disabled={!!ng} title={ng ?? undefined} onClick={() => startMapMode('goto', v.id)}>
+              📍 地点へ移動
             </Btn>
-            <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => askHome(v.id)}>
-              🏠 ホームへ戻る {!demo && <Na />}
+            <Btn size="sm" disabled={!!ng} title={ng ?? undefined} onClick={() => askHome(v.id)}>
+              🏠 ホームへ戻る
             </Btn>
-            <Btn size="sm" disabled={!demo} title={naTitle} onClick={() => startMapMode('pose', v.id)}>
-              🎯 現在地を設定 {!demo && <Na />}
+            <Btn size="sm" disabled={!!ng} title={ng ?? undefined} onClick={() => startMapMode('pose', v.id)}>
+              🎯 現在地を設定
             </Btn>
           </div>
           <div className="mt-1.5 text-xs text-slate-400">
-            {demo ? 'デモモードなので、実機には送られません' : '移動の指示は、バックエンドに車両への命令API（GOTO・RETURN_HOME・SET_POSE）を追加してから使えるようになります'}
+            {demo ? 'デモモードなので、実機には送られません' : 'タスク実行中・手動操縦中は、移動の指示は断られます（先に中止してください）'}
           </div>
         </Section>
       )}
@@ -196,7 +223,7 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
 
       {inDrawer && (
         <button type="button" className="block text-sm text-blue-600 hover:underline" onClick={() => nav(`/vehicles/${v.id}`)}>
-          カメラ映像・詳細ページを開く →
+          詳細ページを開く（カメラ映像・センサー・手動操縦）→
         </button>
       )}
     </>

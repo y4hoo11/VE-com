@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { Level, Log } from '../store/data';
 import { api } from '../services/api';
 import { keepLogs, openLog, toast, toLog, useStore, type ApiLog } from '../store/store';
-import { Btn, Card, cx, inputCls, LvChip } from '../components/ui';
+import { Btn, Card, inputCls, LvChip } from '../components/ui';
+import { cx } from '../components/uiUtils';
 
 const PAGE_SIZE = 100;
 const CSV_CHUNK = 1000; // CSV 出力で1回に取る件数（API の上限）
