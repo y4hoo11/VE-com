@@ -40,6 +40,17 @@ function pickTelemetryExtra(m: Record<string, unknown>): VehicleTelemetryExtra |
 }
 
 class MqttService {
+  // 車両ID → やりかけの移動（タスク・地点へ移動・待ち行列）があるか。PC1 の telemetry から覚える
+  private pendingMove = new Map<string, boolean>();
+
+  /**
+   * その車両に、やりかけの移動があるか。まだ分からない（telemetry を受け取っていない）ときは null。
+   * 緊急停止を解除するとき、解除したとたんに続きを走り出さないようにするために使う
+   */
+  hasPendingMove(agvId: string): boolean | null {
+    return this.pendingMove.get(agvId) ?? null;
+  }
+
   init() {
     const subscribeTopics = () => {
       mqttClient.subscribe(TOPICS, undefined, (err: Error | null) => {
@@ -75,6 +86,10 @@ class MqttService {
         const agvId = topicParts[1];
 
         if (topic.endsWith('/telemetry')) {
+          // PC1（mission_manager）の telemetry には taskId・goal・queued が入っている（ラズパイの分には無い）
+          if ('taskId' in message || 'goal' in message) {
+            this.pendingMove.set(agvId, !!message.taskId || !!message.goal || Number(message.queued) > 0);
+          }
           // オフラインだった車両から telemetry が届いたら、オンラインに戻す
           // （status を送らない送り手（ラズパイ）からでも戻れるよう、無ければ IDLE にする）
           const prev = await prisma.vehicle.findUnique({ where: { id: agvId }, select: { status: true } });

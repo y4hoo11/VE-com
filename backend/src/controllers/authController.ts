@@ -4,6 +4,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../config/database';
 import { JWT_SECRET, JWT_EXPIRES_IN_SECONDS, BCRYPT_ROUNDS } from '../config/auth';
+import { loginSessions } from '../services/loginSessions';
+import { manualDriveService } from '../services/manualDriveService';
+import { socketService } from '../services/socketService';
 
 // 存在しないユーザー名でも照合処理の時間を揃えるためのダミーハッシュ（起動時に1回だけ作る）
 // （応答時間の差から「そのユーザー名が存在するか」を推測されないようにする）
@@ -35,7 +38,18 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: LOGIN_FAILED_MESSAGE });
     }
 
-    const token = jwt.sign({ username: user.username, role: user.role }, JWT_SECRET, {
+    // 同時にログインできるのは 1 端末だけ（後からログインした方が有効）。
+    // ただし、前の端末が手動操縦中のときは、そちらを優先して新しいログインを断る（操縦を途中で切らないため）
+    if (manualDriveService.isUserDriving(user.id)) {
+      return res.status(409).json({
+        success: false,
+        message: 'このアカウントは別の端末で手動操縦中のため、いまはログインできません。操縦を終えてからログインしてください',
+      });
+    }
+    const sid = loginSessions.start(user.id); // これまでのログイン（前の端末のトークン）を無効にする
+    socketService.replaceSession(user.id); // 前の端末に知らせて、ログイン画面に戻す
+
+    const token = jwt.sign({ username: user.username, role: user.role, sid }, JWT_SECRET, {
       subject: user.id,
       expiresIn: JWT_EXPIRES_IN_SECONDS,
     });

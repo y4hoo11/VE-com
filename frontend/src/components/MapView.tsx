@@ -1,6 +1,6 @@
 // 地図（SVG）。車両・経路・地点を描き、地図の操作モード（移動先・現在地の指定）も受け持つ
-// ズーム：ホイール（カーソルの位置を中心に）か右下のボタン。拡大中は何もない所をドラッグして動かす
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+// ズーム：右下のボタン（＋ － ⤢）。拡大中は何もない所をドラッグして動かす
+import { useRef, useState, type PointerEvent } from 'react';
 import { COL, PAUSED_COL, WAYPOINTS, wpByName, type Pt } from '../store/data';
 import { MAP, MAP_IMAGE } from '../store/map';
 import { askGoto, cancelMapMode, closePop, mapModeClick, nearestWp, setMapCursor, togglePop, useStore, veh } from '../store/store';
@@ -51,29 +51,7 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
   const pan = useRef<{ px: number; py: number; v: View; scale: number } | null>(null);
   const zoomed = view.w < FULL.w - 0.5;
 
-  // 画面上の点 → SVG の座標（viewBox の単位）
-  const toSvg = (clientX: number, clientY: number) => {
-    const svg = ref.current!;
-    const p = svg.createSVGPoint();
-    p.x = clientX;
-    p.y = clientY;
-    return p.matrixTransform(svg.getScreenCTM()!.inverse());
-  };
-
-  // ホイールでズーム（ページがスクロールしないよう passive: false で登録する）
-  useEffect(() => {
-    const svg = ref.current;
-    if (!svg) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const c = toSvg(e.clientX, e.clientY);
-      const k = e.deltaY < 0 ? STEP : 1 / STEP;
-      setView((v) => zoomView(v, k, c.x, c.y));
-    };
-    svg.addEventListener('wheel', onWheel, { passive: false });
-    return () => svg.removeEventListener('wheel', onWheel);
-  }, []);
-
+  // ズームは右下のボタンだけ（ホイールでは拡大・縮小しない。スクロールのつもりで地図が動くのを防ぐ）
   const zoomBtn = (k: number) => setView((v) => zoomView(v, k, v.x + v.w / 2, v.y + v.h / 2));
   const selected = s.drawer?.type === 'vehicle' ? s.drawer.id : focusId;
 

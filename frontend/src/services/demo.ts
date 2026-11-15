@@ -134,6 +134,7 @@ export function resetDemo() {
   taskSeq = 1;
   logSeq = 1;
   logs = [];
+  manualSessions.clear();
   ops = { battWarn: 30, battMin: 20 };
   const t = Date.now();
   vehicles = [
@@ -320,17 +321,30 @@ function sendUpdate(v: DemoVehicle) {
 }
 
 // 手動操縦：届いた速度で動かす。棚・壁にぶつかる手前では進まない。指示が途切れたら止まる
+// ログは「操縦を始める」〜「操縦をやめる」の開始と終了だけ（キーを押す・離すたびには残さない）
 const MANUAL_TIMEOUT_MS = 600;
-function endManual(v: DemoVehicle, reason: string) {
+const manualSessions = new Set<string>(); // 操縦中（始めてから、やめるまで）の車両ID
+// 車両を止める（操縦は続いている。ログは残さない）
+function stopManual(v: DemoVehicle) {
   if (!v.manual) return;
   v.manual = null;
   v.speed = 0;
   if (v.status === 'RUNNING') v.status = 'IDLE';
-  addLog(v.id, 'INFO', `手動操縦を終了しました（${reason}）`);
+}
+function beginManual(v: DemoVehicle) {
+  if (manualSessions.has(v.id)) return;
+  manualSessions.add(v.id);
+  addLog(v.id, 'INFO', '手動操縦を開始しました');
+}
+// 車両を止めて、操縦を終わりにする
+function endManual(v: DemoVehicle, reason?: string) {
+  stopManual(v);
+  if (!manualSessions.delete(v.id)) return;
+  addLog(v.id, 'INFO', `手動操縦を終了しました${reason ? `（${reason}）` : ''}`);
 }
 function driveManually(v: DemoVehicle, dt: number) {
   const m = v.manual!;
-  if (Date.now() > m.until) return endManual(v, '画面からの指示が途切れた');
+  if (Date.now() > m.until) return stopManual(v); // 指示が途切れた
   // TT-02 は車なので、前後に動いているときだけ曲がれる（その場では回れない）
   if (m.linear !== 0) v.theta = normAngle(v.theta + m.angular * dt * Math.sign(m.linear));
   const next = { x: v.x + Math.cos(v.theta) * m.linear * dt, y: v.y + Math.sin(v.theta) * m.linear * dt };
@@ -443,7 +457,8 @@ export const demoCommand = {
 // ---------------------------------------------------------------
 // Socket.IO の代わり（緊急停止・解除）
 // ---------------------------------------------------------------
-export function demoAck(event: string, data: unknown): { ok: boolean; error?: string } {
+const HELD_NOTE = '移動は一時停止のままです。周りを確認してから「▶ 再開」を押すと、続きを走ります';
+export function demoAck(event: string, data: unknown): { ok: boolean; error?: string; note?: string } {
   const id = (data as { vehicleId?: string } | null)?.vehicleId;
   const v = vehicles.find((x) => x.id === id);
   if (!v) return { ok: false, error: '車両が見つかりません' };
@@ -483,12 +498,23 @@ export function demoAck(event: string, data: unknown): { ok: boolean; error?: st
     }
     return err ? { ok: false, error: err } : { ok: true };
   }
+  if (event === 'manual_drive_start') {
+    const ng = whyNotMove(v) ?? (v.mode === 'GOTO' ? '地点へ移動中は操縦できません' : null);
+    if (ng) return { ok: false, error: ng };
+    beginManual(v);
+    return { ok: true };
+  }
+  if (event === 'manual_drive_end') {
+    endManual(v);
+    sendUpdate(v);
+    return { ok: true };
+  }
   if (event === 'manual_drive') {
     const d = data as { linear?: number; angular?: number };
     const linear = Math.max(-0.3, Math.min(0.3, Number(d.linear) || 0));
     const angular = Math.max(-1, Math.min(1, Number(d.angular) || 0));
     if (linear === 0 && angular === 0) {
-      endManual(v, 'キーを離した');
+      stopManual(v); // キーを離した（操縦は続いている）
       sendUpdate(v);
       return { ok: true };
     }
@@ -497,7 +523,7 @@ export function demoAck(event: string, data: unknown): { ok: boolean; error?: st
       endManual(v, ng);
       return { ok: false, error: ng };
     }
-    if (!v.manual) addLog(v.id, 'INFO', '手動操縦を開始しました');
+    beginManual(v);
     v.manual = { linear, angular, until: Date.now() + MANUAL_TIMEOUT_MS };
     v.status = 'RUNNING';
     return { ok: true };
@@ -516,9 +542,12 @@ export function demoAck(event: string, data: unknown): { ok: boolean; error?: st
   if (event === 'acknowledge_emergency') {
     if (v.status !== 'ERROR') return { ok: false, error: 'この車両は異常中ではありません' };
     v.status = v.prevStatus === 'ERROR' ? 'IDLE' : v.prevStatus;
+    // 移動の途中だったら、解除してもすぐには動かさない（一時停止のまま。「再開」で続きを走る）
+    const held = v.route.length > 1 || v.wait > 0;
+    if (held) v.paused = true;
     addLog(v.id, 'INFO', '緊急状態を解除しました');
     sendUpdate(v);
-    return { ok: true };
+    return held ? { ok: true, note: HELD_NOTE } : { ok: true };
   }
   return { ok: false, error: `デモでは未対応です: ${event}` };
 }

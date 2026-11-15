@@ -1,7 +1,7 @@
 // 車両詳細ページ：カメラを大きく映す。手動操縦（WASD）もここに置く
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { canOperate, closeDrawer, manualDrive, nav, openLog, S, toast, useStore, veh } from '../store/store';
+import { canOperate, closeDrawer, manualDrive, manualDriveEnd, manualDriveStart, nav, openLog, S, toast, useStore, veh } from '../store/store';
 import type { Vehicle } from '../store/data';
 import { VehiclePanel } from '../components/Drawer';
 import { MapView } from '../components/MapView';
@@ -184,14 +184,19 @@ function ManualDrive({ v }: { v: Vehicle }) {
       window.removeEventListener('blur', release);
       document.removeEventListener('visibilitychange', hidden);
       stop(); // 操縦をやめた・ページを離れたときも止める
+      void manualDriveEnd(v.id); // 操縦の終わりをサーバーに知らせる（ログの「終了」はここで 1 回だけ）
     };
   }, [active, v.id]);
 
-  const toggle = () => {
-    setKeys(new Set());
-    setArmed((a) => !a);
+  const toggle = async () => {
     // ボタンにフォーカスが残ると SPACE の緊急停止が効かないので外す
     (document.activeElement as HTMLElement | null)?.blur();
+    setKeys(new Set());
+    if (armed) return setArmed(false); // 終わりの知らせは、上の後片付けが送る
+    // 操縦の始まりをサーバーに知らせる（ログの「開始」。ほかの人が操縦中なら断られる）
+    const r = await manualDriveStart(v.id);
+    if (!r.ok) return toast(`手動操縦を始められません: ${r.error}`, 'error');
+    setArmed(true);
   };
 
   const shown = active ? keys : new Set<DriveKey>();

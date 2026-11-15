@@ -123,7 +123,7 @@ class FakeVehicle {
         this.stop();
         break;
       case 'PAUSE':
-        if (this.status === 'RUNNING') this.paused = true;
+        this.paused = true; // 本物と同じく、止まっているとき・異常中でも受け付ける（RESUME まで続く）
         break;
       case 'RESUME':
         this.paused = false;

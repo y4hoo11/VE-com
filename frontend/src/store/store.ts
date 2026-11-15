@@ -738,6 +738,9 @@ export async function stopAll() {
 // サーバーは 0.6 秒届かなければ止める
 export const manualDrive = (vehicleId: string, linear: number, angular: number) =>
   emitWithAck('manual_drive', { vehicleId, linear, angular });
+// 「操縦を始める」〜「操縦をやめる」が 1 回の操縦。ログに残るのはこの開始と終了だけ
+export const manualDriveStart = (vehicleId: string) => emitWithAck('manual_drive_start', { vehicleId });
+export const manualDriveEnd = (vehicleId: string) => emitWithAck('manual_drive_end', { vehicleId });
 
 export function askClear(id: string) {
   const v = veh(id);
@@ -748,7 +751,8 @@ export function askClear(id: string) {
     body: `${ERR[v.err.code] ?? v.err.code}：${v.err.reason}`,
     detail: [
       `原因コード: ${v.err.code}（${v.err.source}）`,
-      '解除すると、車両に CLEAR_EMERGENCY を送り、待機状態に戻します。',
+      '解除すると、車両に CLEAR_EMERGENCY を送ります。',
+      '移動の途中だった場合、解除してもすぐには動きません（一時停止のまま）。「▶ 再開」を押すと続きを走ります。',
     ],
     check: '車両の周りに人や障害物がないことを確認しました',
     ok: '解除する',
@@ -761,8 +765,10 @@ export async function clearEmergency(id: string) {
   const v = veh(id);
   if (!v) return;
   const res = await emitWithAck('acknowledge_emergency', { vehicleId: id });
-  if (res.ok) toast(`${v.name} を解除しました`, 'ok');
-  else toast(`${v.name} の解除: ${res.error}`, 'error');
+  if (!res.ok) return toast(`${v.name} の解除: ${res.error}`, 'error');
+  toast(`${v.name} を解除しました`, 'ok');
+  // 移動の途中だったときは、一時停止のままになる（「再開」を押すまで動かない）
+  if (res.note) toast(res.note, 'warn');
 }
 
 // ---------------------------------------------------------------

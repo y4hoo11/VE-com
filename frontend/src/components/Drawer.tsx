@@ -181,9 +181,14 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
         ) : (
           <div className="space-y-2">
             <div className="text-sm text-slate-400">
-              {v.mode === 'GOTO' ? `${v.goal} へ移動中（タスクではない移動）${v.paused ? ' ・ ⏸ 一時停止中' : ''}` : 'タスクはありません'}
+              {v.mode === 'GOTO'
+                ? `${v.goal} へ移動中（タスクではない移動）${v.paused ? ' ・ ⏸ 一時停止中' : ''}`
+                : v.paused
+                  ? '⏸ 一時停止中（「再開」を押すまで、タスクを割り当てても動きません）'
+                  : 'タスクはありません'}
             </div>
-            {v.mode === 'GOTO' && pauseBtn}
+            {/* 一時停止中は、移動が無くても「再開」を出す（緊急停止の解除のあとなど） */}
+            {(v.mode === 'GOTO' || v.paused) && pauseBtn}
           </div>
         )}
       </Section>
