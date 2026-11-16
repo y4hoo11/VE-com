@@ -50,7 +50,9 @@ class TestMission(unittest.TestCase):
         self.wps = WaypointBook(WAYPOINTS)
         self.nav = FakeNav()
         self.tasks, self.events = [], []
-        self.m = MissionLogic(CFG, self.wps, self.nav, self.tasks.append, self.events.append)
+        self.cmds = []
+        self.m = MissionLogic(CFG, self.wps, self.nav, self.tasks.append, self.events.append,
+                              publish_cmd=lambda v, w: self.cmds.append((v, w)))
         self.m.online = True
         self.m.pose = Pose2D(-4.0, -4.0, 0.0)
         self.t = 1000.0
@@ -172,6 +174,100 @@ class TestMission(unittest.TestCase):
         todo = self.m.handle_command({"action": "SET_POSE", "x": 1.0, "y": 2.0, "theta": 0.5}, self.t)
         self.assertAlmostEqual(todo["set_pose"].y, 2.0)
         self.assertTrue(self.m.handle_command({"action": "GLOBAL_LOCALIZE"}, self.t)["global_localize"])
+
+    # ---- 手動操縦（MANUAL_DRIVE）----
+    def drive(self, linear, angular):
+        self.m.handle_command({"action": "MANUAL_DRIVE", "linear": linear, "angular": angular}, self.t)
+
+    def test_manual_drive_clamps_and_publishes(self):
+        self.drive(1.0, -5.0)                           # 上限 0.3 m/s・1.0 rad/s に抑える
+        self.tick()
+        self.assertEqual(self.cmds[-1], (0.3, -1.0))
+        self.assertEqual(self.m.summary()["mode"], "MANUAL")
+        self.drive(0.0, 0.0)                            # キーを離した → 0 を送って終わり
+        self.assertEqual(self.cmds[-1], (0.0, 0.0))
+        n = len(self.cmds)
+        self.tick(n=3)
+        self.assertEqual(len(self.cmds), n)             # 終わったら何も出さない（Nav2 の邪魔をしない）
+        self.assertEqual(self.m.summary()["mode"], "IDLE")
+
+    def test_manual_drive_timeout(self):
+        self.drive(0.2, 0.0)
+        self.tick(0.1, 4)                               # 0.4 秒: まだ続く
+        self.assertEqual(self.cmds[-1], (0.2, 0.0))
+        self.tick(0.1, 2)                               # 0.6 秒: Web から途切れた → 止める
+        self.assertEqual(self.cmds[-1], (0.0, 0.0))
+        self.assertFalse(self.m.manual)
+
+    def test_manual_drive_ignored_during_task_and_estop(self):
+        self.m.handle_command({"type": "GOTO", "target": "A13"}, self.t)
+        self.drive(0.2, 0.0)
+        self.tick()
+        self.assertEqual(self.cmds, [])
+        self.assertFalse(self.m.manual)
+        self.m.handle_command({"action": "CANCEL_TASK"}, self.t)
+        self.m.handle_command({"action": "EMERGENCY_STOP"}, self.t)
+        self.drive(0.2, 0.0)
+        self.tick()
+        self.assertEqual(self.cmds, [])
+
+    def test_task_arrival_ends_manual(self):
+        self.drive(0.2, 0.3)
+        self.tick()
+        self.m.handle_command({"type": "GOTO", "target": "A13"}, self.t)
+        self.tick()
+        self.assertEqual(self.cmds[-1], (0.0, 0.0))
+        self.assertFalse(self.m.manual)
+        self.tick()
+        self.assertEqual(self.nav.goals[-1][1], "A13")
+
+    def test_manual_estop_stops(self):
+        self.drive(0.2, 0.0)
+        self.tick()
+        self.m.handle_command({"action": "EMERGENCY_STOP"}, self.t)
+        self.assertEqual(self.cmds[-1], (0.0, 0.0))
+        self.assertFalse(self.m.manual)
+
+    # ---- paused・GOTO の結果 ----
+    def test_paused_in_summary(self):
+        self.assertFalse(self.m.summary()["paused"])
+        self.m.handle_command({"action": "PAUSE"}, self.t)
+        self.tick()
+        self.assertTrue(self.m.summary()["paused"])     # タスクが無くても一時停止中と分かる
+        self.m.handle_command({"action": "RESUME"}, self.t)
+        self.assertFalse(self.m.summary()["paused"])
+
+    def test_goto_unknown_reports_failed(self):
+        self.m.handle_command({"type": "GOTO", "target": "どこか"}, self.t)
+        d = self.tasks[-1]
+        self.assertEqual((d["taskId"], d["command"], d["status"], d["goal"]), (None, "GOTO", "FAILED", "どこか"))
+
+    def test_goto_progress_and_failure_reported(self):
+        self.m.handle_command({"type": "GOTO", "target": "Station-3"}, self.t)
+        self.tick()
+        self.assertEqual(self.tasks[-1]["status"], "IN_PROGRESS")
+        self.assertEqual(self.tasks[-1]["command"], "GOTO")
+        self.tick()
+        self.nav.state = NAV_FAILED
+        self.tick()
+        self.tick(0.5, 3)
+        self.nav.state = NAV_FAILED
+        self.tick()
+        d = self.tasks[-1]
+        self.assertEqual((d["taskId"], d["status"], d["goal"]), (None, "FAILED", "Station-3"))
+
+    def test_return_home_completed_reported(self):
+        self.m.pose = Pose2D(0.0, 0.0, 0.0)
+        self.m.handle_command({"type": "RETURN_HOME"}, self.t)
+        self.tick(n=2)
+        self.arrive()
+        d = self.tasks[-1]
+        self.assertEqual((d["command"], d["status"], d["goal"]), ("RETURN_HOME", "COMPLETED", "Home"))
+
+    def test_web_task_has_no_command_field(self):
+        self.m.handle_command({"type": "TASK_ASSIGN", "taskId": "t9", "targetLocation": "Dock-B"}, self.t)
+        self.tick()
+        self.assertNotIn("command", self.tasks[-1])
 
 
 class TestCheckWaypoints(unittest.TestCase):

@@ -3,7 +3,8 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { approvalsOf, fmtSetting, isOpenReq, needApprovals, RANKS, REQ_STATUS, SETTING_ITEMS, settingItem, ST, valueError, type ChangeRequest, type Rank, type SettingItem } from '../store/data';
 import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, reqNotes, restartDemo, savePrefs, setDemoMode, setTestOnline, submitChangeRequest, toast, useStore, withdrawRequest } from '../store/store';
-import { Btn, Card, cx, fmtDT, fmtT, FormRow, inputCls, Kv, LockIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
+import { Btn, Card, FormRow, inputCls, Kv, LockIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
+import { cx, fmtDT, fmtT } from '../components/uiUtils';
 import { SettingApprovals } from './SettingApprovals';
 
 // 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める

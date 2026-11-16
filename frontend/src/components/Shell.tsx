@@ -19,7 +19,8 @@ import {
   useStore,
   veh,
 } from '../store/store';
-import { Battery, Btn, cx, fmtDT, fmtNum, fmtPct, fmtT, Tag, VChip } from './ui';
+import { Battery, Btn, Tag, VChip } from './ui';
+import { cx, fmtDT, fmtNum, fmtPct, fmtT } from './uiUtils';
 
 // ---------------------------------------------------------------
 // ヘッダー
@@ -326,7 +327,7 @@ function VehPop({ id }: { id: string }) {
           詳しく見る
         </Btn>
         <Btn size="sm" onClick={() => { closePop(); nav(`/vehicles/${v.id}`); }}>
-          カメラ
+          カメラ・操縦
         </Btn>
         <div className="flex-1" />
         <Btn size="sm" variant="danger" disabled={!v.online || v.status === 'ERROR'} onClick={() => estop(v.id)}>

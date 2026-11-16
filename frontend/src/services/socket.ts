@@ -24,8 +24,16 @@ socket.on('disconnect', (reason) => {
   if (reason === 'io server disconnect') socket.connect();
 });
 
-// サーバーから返ってくる処理結果
-export type SocketAck = { ok: boolean; error?: string };
+// 同じアカウントで別の端末からログインされた（後からログインした方が有効）。
+// 理由をログイン画面に出せるように残してから、ログイン画面に戻す
+export const LOGIN_NOTICE_KEY = 'vecom_login_notice';
+socket.on('session:replaced', () => {
+  sessionStorage.setItem(LOGIN_NOTICE_KEY, '別の端末でログインされたため、この端末はログアウトしました');
+  window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+});
+
+// サーバーから返ってくる処理結果（note は、成功したときの補足）
+export type SocketAck = { ok: boolean; error?: string; note?: string };
 
 /**
  * サーバーにイベントを送り、結果を待つ（5秒で返事がなければ失敗扱い）

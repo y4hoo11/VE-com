@@ -2,7 +2,8 @@
 import { useState } from 'react';
 import type { Task } from '../store/data';
 import { askCancel, openModal, openTask, useStore, veh } from '../store/store';
-import { Bar, Btn, Card, cx, fmtDT, fmtPct, inputCls, PrioChip, TChip } from '../components/ui';
+import { Bar, Btn, Card, inputCls, PrioChip, TChip } from '../components/ui';
+import { cx, fmtDT, fmtPct } from '../components/uiUtils';
 
 const TABS: [string, string, (t: Task) => boolean][] = [
   ['open', '未完了', (t) => ['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(t.status)],

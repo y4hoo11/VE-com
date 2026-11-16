@@ -11,6 +11,15 @@ TASK_ASSIGN: {"type":"TASK_ASSIGN","taskId":"…","taskTitle":"…","startLocati
 
 移動中に止める条件（止めたら Nav2 のゴールを取り消し、条件が消えたら同じ地点へ出し直す）:
   緊急停止中 / 一時停止中 / 自己位置を見失った / 車両（ラズパイ）からデータが来ない
+
+GOTO / RETURN_HOME（Web のタスクではない単発の移動）も、同じ agv/{id}/task に
+{"taskId": null, "command": "GOTO", "goal": "Station-1", "status", ...} の形で進み具合・失敗を知らせる。
+
+MANUAL_DRIVE（Web のキーボード操縦）: {"action":"MANUAL_DRIVE","linear":m/s,"angular":rad/s}
+  - タスク（GOTO などを含む）の実行中・待ち行列にあるとき、緊急停止中は無視する
+  - 速さは manual.max_linear / max_angular で抑える
+  - manual.timeout_s 秒 Web から届かなければ 0 を送って手動操縦を終える
+  - TT-02 は車なので、その場では回れない（linear が 0 で angular だけだとハンドルを切るだけ）
 """
 from __future__ import annotations
 
@@ -51,6 +60,7 @@ class Job:
     nav_initial_length: float = 0.0
     nav_remaining: float = 0.0
     confirmed: bool = False
+    command: str = ""          # task_id が無い単発の移動のとき "GOTO" / "RETURN_HOME"（Web への知らせに使う）
 
     @property
     def current(self) -> Step | None:
@@ -106,9 +116,12 @@ class MissionLogic:
     """navigator は go(pose, name) / cancel() / state / distance_remaining を持つもの（nav_client.Nav2Client）。"""
 
     def __init__(self, cfg, waypoints: WaypointBook, navigator,
-                 publish_task: Callable[[dict], None], publish_event: Callable[[dict], None], log=None):
+                 publish_task: Callable[[dict], None], publish_event: Callable[[dict], None], log=None,
+                 publish_cmd: Callable[[float, float], None] | None = None):
         self.tcfg = cfg["tasks"]
         self.ncfg = cfg["nav"]
+        self.mcfg = cfg.get("manual") or {}
+        self.publish_cmd = publish_cmd   # 手動操縦の速度（v [m/s], ω [rad/s]）を /cmd_vel に出す
         self.waypoints = waypoints
         self.nav = navigator
         self.publish_task = publish_task
@@ -136,6 +149,12 @@ class MissionLogic:
         self._blocked_reported = False
         self._t_progress = 0.0
 
+        # 手動操縦（MANUAL_DRIVE）
+        self.manual = False
+        self._manual_cmd = (0.0, 0.0)
+        self._manual_t = 0.0
+        self._manual_ignored_t = -math.inf
+
     def _info(self, text: str) -> None:
         if self.log:
             self.log(text)
@@ -151,6 +170,9 @@ class MissionLogic:
         if action == "EMERGENCY_STOP":
             self.estop = True
             self._stop_nav()
+            self._end_manual("緊急停止")
+        elif action == "MANUAL_DRIVE":
+            self._manual_drive(msg, now)
         elif action == "CLEAR_EMERGENCY":
             self.estop = False
         elif action == "PAUSE":
@@ -179,13 +201,76 @@ class MissionLogic:
             pose = parse_pose(src, self.waypoints)
             if pose is None:
                 self._info(f"GOTO の行き先が分かりません: {msg}")
+                shown = str(target) if target is not None else f"({msg.get('x')},{msg.get('y')})"
+                self._task_status(None, "FAILED", "GOTO", 0, f"行き先 '{shown}' が waypoints に見つかりません",
+                                  command="GOTO", goal=shown)
                 return {}
             name = str(target) if target else f"({pose.x:.2f},{pose.y:.2f})"
             self.tasks.push(Job(None, f"GOTO {name}", [Step("NAV", "GOTO", pose, name, message=f"{name} へ移動中",
-                                                            auto_heading=not has_heading(src, self.waypoints))]))
+                                                            auto_heading=not has_heading(src, self.waypoints))],
+                                command="GOTO"))
         elif mtype == "RETURN_HOME":
             self._push_return_home()
         return {}
+
+    # ---- 手動操縦 ----
+    def _manual_drive(self, msg: dict, now: float) -> None:
+        reason = ""
+        if self.tasks.current is not None or self.tasks.queue:
+            reason = "タスク実行中"
+        elif self.estop:
+            reason = "緊急停止中"
+        if reason:
+            if self.manual:
+                self._end_manual(reason)
+            if now - self._manual_ignored_t > 5.0:   # キーを押している間ずっと届くので、ログは5秒に1回まで
+                self._manual_ignored_t = now
+                self._info(f"手動操縦の指令を無視しました（{reason}）")
+            return
+        try:
+            v = float(msg.get("linear", 0.0))
+            w = float(msg.get("angular", 0.0))
+        except (TypeError, ValueError):
+            return
+        if not (math.isfinite(v) and math.isfinite(w)):
+            return
+        max_v = float(self.mcfg.get("max_linear", 0.3))
+        max_w = float(self.mcfg.get("max_angular", 1.0))
+        v = max(-max_v, min(max_v, v))
+        w = max(-max_w, min(max_w, w))
+        if abs(v) < 1e-3 and abs(w) < 1e-3:
+            if self.manual:
+                self._end_manual("キーを離した")
+            return
+        if not self.manual:
+            self._info("手動操縦を開始します")
+        self.manual = True
+        self._manual_cmd = (v, w)
+        self._manual_t = now
+
+    def _end_manual(self, reason: str) -> None:
+        if not self.manual:
+            return
+        self.manual = False
+        self._manual_cmd = (0.0, 0.0)
+        self._send_cmd(0.0, 0.0)
+        self._info(f"手動操縦を終了しました（{reason}）")
+
+    def _send_cmd(self, v: float, w: float) -> None:
+        if self.publish_cmd:
+            self.publish_cmd(v, w)
+
+    def _manual_tick(self, now: float) -> None:
+        if not self.manual:
+            return
+        if self.tasks.current is not None or self.tasks.queue:
+            self._end_manual("タスクが届いた")
+        elif self.estop:
+            self._end_manual("緊急停止")
+        elif now - self._manual_t > float(self.mcfg.get("timeout_s", 0.5)):
+            self._end_manual("Web からの指令が途切れた")
+        else:
+            self._send_cmd(*self._manual_cmd)
 
     def assign_task(self, msg: dict) -> None:
         task_id = msg.get("taskId")
@@ -234,8 +319,13 @@ class MissionLogic:
     def _push_return_home(self) -> None:
         home_name = str(self.tcfg.get("home_waypoint", "Home"))
         home = parse_pose(home_name, self.waypoints)
-        if home is not None:
-            self.tasks.push(Job(None, "RETURN_HOME", [Step("NAV", "RETURN_HOME", home, home_name, message=f"{home_name} へ戻り中")]))
+        if home is None:
+            self._info(f"ホームの地点 '{home_name}' が waypoints に見つかりません")
+            self._task_status(None, "FAILED", "RETURN_HOME", 0, f"ホームの地点 '{home_name}' が waypoints に見つかりません",
+                              command="RETURN_HOME", goal=home_name)
+            return
+        self.tasks.push(Job(None, "RETURN_HOME", [Step("NAV", "RETURN_HOME", home, home_name, message=f"{home_name} へ戻り中")],
+                            command="RETURN_HOME"))
 
     # ==================================================================
     #  周期処理（10Hz）
@@ -243,9 +333,10 @@ class MissionLogic:
     def tick(self, now: float | None = None) -> None:
         now = time.time() if now is None else now
         self.note = ""
+        self._manual_tick(now)
         job = self.tasks.next(now)
         if job is None:
-            self.mode = "IDLE" if self.online else "OFFLINE"
+            self.mode = "MANUAL" if self.manual else ("IDLE" if self.online else "OFFLINE")
             self._stop_nav()
             self.blocked = False
             return
@@ -254,7 +345,7 @@ class MissionLogic:
             self._finish_job("COMPLETED", "完了しました", now)
             return
         if self._t_progress == 0.0:
-            self._task_status(job.task_id, "IN_PROGRESS", step.phase, job.progress(now), step.message)
+            self._job_status(job, "IN_PROGRESS", step.phase, job.progress(now), step.message)
             self._t_progress = now
 
         hold = self._hold_reason()
@@ -373,7 +464,7 @@ class MissionLogic:
             self._finish_job("COMPLETED", "完了しました", now)
         else:
             st = job.current
-            self._task_status(job.task_id, "IN_PROGRESS", st.phase, job.progress(now), st.message)
+            self._job_status(job, "IN_PROGRESS", st.phase, job.progress(now), st.message)
 
     def _finish_job(self, status: str, message: str, now: float) -> None:
         self._stop_nav()
@@ -384,23 +475,32 @@ class MissionLogic:
         if job is None:
             return
         phase = job.current.phase if job.current else "DONE"
-        self._task_status(job.task_id, status, phase, 100 if status == "COMPLETED" else job.progress(now), message)
+        self._job_status(job, status, phase, 100 if status == "COMPLETED" else job.progress(now), message)
         self._info(f"ジョブ終了 [{status}] {job.title}: {message}")
         if status == "COMPLETED" and job.task_id and self.tcfg.get("return_home_after_task", False) and not self.tasks.queue:
             self._push_return_home()
 
     def _periodic_progress(self, job: Job, now: float) -> None:
-        if job.task_id and now - self._t_progress >= float(self.tcfg.get("progress_publish_s", 2.0)):
+        if (job.task_id or job.command) and now - self._t_progress >= float(self.tcfg.get("progress_publish_s", 2.0)):
             self._t_progress = now
             st = job.current
             if st is not None:
-                self._task_status(job.task_id, "IN_PROGRESS", st.phase, job.progress(now), self.note or st.message)
+                self._job_status(job, "IN_PROGRESS", st.phase, job.progress(now), self.note or st.message)
 
-    def _task_status(self, task_id, status: str, phase: str, progress: int, message: str) -> None:
-        if not task_id:
+    def _job_status(self, job: Job, status: str, phase: str, progress: int, message: str) -> None:
+        goal = next((s.goal_name for s in job.steps if s.kind == "NAV"), "") if job.command else ""
+        self._task_status(job.task_id, status, phase, progress, message, command=job.command, goal=goal)
+
+    def _task_status(self, task_id, status: str, phase: str, progress: int, message: str,
+                     command: str = "", goal: str = "") -> None:
+        """Web のタスクは taskId つき。GOTO / RETURN_HOME は taskId: null と command・goal つきで知らせる。"""
+        if not task_id and not command:
             return
-        self.publish_task({"taskId": task_id, "status": status, "phase": phase,
-                           "progress": int(progress), "message": message})
+        d = {"taskId": task_id or None, "status": status, "phase": phase,
+             "progress": int(progress), "message": message}
+        if not task_id:
+            d.update({"command": command, "goal": goal})
+        self.publish_task(d)
 
     # ==================================================================
     def status(self) -> str:
@@ -421,6 +521,7 @@ class MissionLogic:
         st = job.current if job else None
         return {
             "status": self.status(), "mode": self.mode, "note": self.note,
+            "paused": self.paused,
             "phase": st.phase if st else None,
             "taskId": job.task_id if job else None,
             "goal": st.goal_name if st and st.kind == "NAV" else None,

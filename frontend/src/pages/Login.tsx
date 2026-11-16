@@ -9,10 +9,11 @@
  * - 認証成功時は `AuthContext` 経由でセッション状態を更新します。
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { isAxiosError } from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import { LOGIN_NOTICE_KEY } from '../services/socket';
 import { AUTH_CONFIG, MOCK_ACCOUNTS } from '../config/Auth';
 import type { AuthResult } from '../types/Auth';
 import { LoginBackground } from '../components/login/LoginBackground';
@@ -23,7 +24,11 @@ export const Login: React.FC = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  // 別の端末でログインされてログアウトになったときは、その理由を最初に出す
+  const [error, setError] = useState(() => sessionStorage.getItem(LOGIN_NOTICE_KEY) ?? '');
+  useEffect(() => {
+    sessionStorage.removeItem(LOGIN_NOTICE_KEY);
+  }, []);
   const [loading, setLoading] = useState(false);
 
   const mockLogin = (u: string, p: string): Promise<AuthResult> => {

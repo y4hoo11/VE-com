@@ -1,9 +1,11 @@
 // 地図・地点：地図と地点（waypoints.yaml）の確認。編集は将来
 import { useState } from 'react';
 import { WAYPOINTS } from '../store/data';
-import { toast, useStore } from '../store/store';
+import { MAP } from '../store/map';
+import { useStore } from '../store/store';
 import { MapView } from '../components/MapView';
-import { Btn, Card, cx, inputCls, Kv, Tag } from '../components/ui';
+import { Btn, Card, Kv, Tag } from '../components/ui';
+import { cx } from '../components/uiUtils';
 
 export function MapPage() {
   const s = useStore();
@@ -13,11 +15,7 @@ export function MapPage() {
       <Card
         title={
           <>
-            地図
-            <select className={cx(inputCls, 'w-56 font-normal')} defaultValue="warehouse_map" onChange={() => toast('地図の切り替えは未対応です', 'warn')}>
-              <option value="warehouse_map">warehouse_map（使用中）</option>
-              <option value="demo_map">demo_map</option>
-            </select>
+            地図 <span className="text-xs font-normal text-slate-500">{MAP.id}</span>
           </>
         }
         bodyClass="relative"
@@ -28,7 +26,7 @@ export function MapPage() {
         <Card title="地図の情報" bodyClass="p-4">
           <Kv
             rows={[
-              ['大きさ', '16m × 10m'],
+              ['大きさ', `${MAP.width.toFixed(1)}m × ${MAP.height.toFixed(1)}m`],
             ]}
           />
         </Card>

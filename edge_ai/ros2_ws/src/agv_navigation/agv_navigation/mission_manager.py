@@ -15,6 +15,7 @@
   agv/task_status   String(JSON)   タスクの進み具合（→ agv/{id}/task）
   agv/mission_events String(JSON)  LOCALIZATION_LOST / BLOCKED（→ agv/{id}/emergency）
   initialpose       PoseWithCovarianceStamped  起動時・SET_POSE で AMCL に現在地を教える
+  cmd_vel           Twist          手動操縦（MANUAL_DRIVE）のときだけ。タスクが無いとき = Nav2 が出していないとき
 アクション:
   navigate_to_pose（Nav2）
 """
@@ -27,7 +28,7 @@ import time
 from pathlib import Path
 
 import rclpy
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.time import Time
@@ -60,6 +61,11 @@ DEFAULTS = {
         "retry_delay_s": 3.0,
         "blocked_report_s": 15.0,             # この秒数進めなければ Web に BLOCKED
         "fail_after_blocked_s": 60.0,         # この秒数進めなければタスク失敗
+    },
+    "manual": {                               # Web のキーボード操縦（MANUAL_DRIVE）
+        "max_linear": 0.3,                    # 前後の速さの上限 [m/s]
+        "max_angular": 1.0,                   # 回転の上限 [rad/s]
+        "timeout_s": 0.5,                     # Web から届かなければ止める [s]
     },
     "localization": {
         "initial_pose": "Home",               # 起動時の現在地（地点名 or "x,y,deg"）
@@ -100,11 +106,13 @@ class MissionManager(Node):
         self.pub_event = self.create_publisher(String, "agv/mission_events", EVENTS)
         self.pub_initial = self.create_publisher(PoseWithCovarianceStamped, "initialpose", 10)
         self.global_loc = self.create_client(Empty, "reinitialize_global_localization")
+        self.pub_cmd_vel = self.create_publisher(Twist, "cmd_vel", 10)
 
         self.logic = MissionLogic(self.cfg, self.waypoints, self.nav,
                                   publish_task=lambda d: self.pub_task.publish(json_msg(d)),
                                   publish_event=self._event,
-                                  log=lambda t: self.get_logger().info(t))
+                                  log=lambda t: self.get_logger().info(t),
+                                  publish_cmd=self._publish_cmd_vel)
 
         self.create_subscription(String, "agv/command", self._on_command, EVENTS)
         self.create_subscription(Bool, "emergency_stop", self._on_estop, LATCHED)
@@ -142,6 +150,12 @@ class MissionManager(Node):
         except Exception:
             return str(Path(__file__).resolve().parent.parent.joinpath(*parts))
 
+    def _publish_cmd_vel(self, v: float, w: float) -> None:
+        m = Twist()
+        m.linear.x = float(v)
+        m.angular.z = float(w)
+        self.pub_cmd_vel.publish(m)
+
     def _event(self, d: dict) -> None:
         self.get_logger().warn(f"通知: {d.get('code')} {d.get('reason')}")
         self.pub_event.publish(json_msg(d))
@@ -153,7 +167,8 @@ class MissionManager(Node):
         d = parse_json(msg)
         if not d:
             return
-        self.get_logger().info(f"コマンド: {json.dumps(d, ensure_ascii=False)}")
+        if d.get("action") != "MANUAL_DRIVE":   # 手動操縦は 0.2 秒ごとに届くのでログに出さない
+            self.get_logger().info(f"コマンド: {json.dumps(d, ensure_ascii=False)}")
         if d.get("action") == "EMERGENCY_STOP":
             self.estop_cmd = True
         elif d.get("action") == "CLEAR_EMERGENCY":

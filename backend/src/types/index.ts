@@ -66,6 +66,24 @@ export interface VehicleTelemetryExtra {
   taskId?: string;
   mode?: string;
   note?: string;
+  paused?: boolean; // 一時停止中か（ROS 側に追加をお願いしている項目）
+}
+
+// タスクの進捗（PC1 の agv/{id}/task を画面へ流すもの）
+export interface TaskProgressPayload {
+  taskId: string;
+  vehicleId: string;
+  status: string;
+  phase: string | null;
+  progress: number | null;
+  message: string;
+}
+
+// Nav2 が計画した経路（PC1 の agv/{id}/path を画面へ流すもの）。座標は地図の m
+export interface VehiclePathPayload {
+  id: string;
+  points: { x: number; y: number }[];
+  goal: { x: number; y: number } | null;
 }
 
 // サーバーの接続状態（画面のヘッダー・お知らせ帯に出す）
