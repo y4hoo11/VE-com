@@ -65,7 +65,7 @@ function Frame({ title, children, footer, error, wide }: { title: ReactNode; chi
         </div>
         {newErr.length > 0 && (
           <div className="border-b border-red-200 bg-red-50 px-5 py-2 text-sm font-semibold text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-            ⚠ {newErr.map((v) => v.name).join('、')} で異常が発生しました（画面上部の帯を確認してください）
+            ⚠ {newErr.map((v) => v.name).join('、')} で異常が発生しました
           </div>
         )}
         <div className="flex-1 space-y-4 overflow-auto px-5 py-4">{children}</div>
@@ -176,7 +176,7 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
         <>
           <Btn onClick={closeModal}>キャンセル</Btn>
           <Btn variant="pri" disabled={busy} onClick={submit}>
-            {mode === 'edit' ? '保存' : assignNext ? '作成して割り当てへ →' : '作成'}
+            {mode === 'edit' ? '保存' : assignNext ? '作成して割り当てる' : '作成'}
           </Btn>
         </>
       }
@@ -197,7 +197,7 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
           </select>
         </Field>
       </div>
-      <Field label="優先度" hint="5 がいちばん急ぎ。一覧は優先度の高い順に並びます">
+      <Field label="優先度" hint="5 が最優先">
         <div className="flex overflow-hidden rounded-md border border-slate-300 dark:border-slate-600">
           {[1, 2, 3, 4, 5].map((p) => (
             <button
@@ -260,7 +260,6 @@ function AssignModal({ taskId, fromCreate }: { taskId: string; fromCreate?: bool
         </>
       }
     >
-      {fromCreate && <div className="rounded-lg bg-green-50 p-3 text-sm font-semibold text-green-800 dark:bg-green-950 dark:text-green-300">✓ タスク {t.no} を作成しました。続けて車両を選んでください。</div>}
       <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800">
         <div className="font-bold">
           {t.no} {t.title}
@@ -285,7 +284,7 @@ function AssignModal({ taskId, fromCreate }: { taskId: string; fromCreate?: bool
                 <b>{v.name}</b>
                 <span className="text-xs text-slate-500">{v.id}</span>
                 <VChip v={v} />
-                {v.id === rec && <Tag tone="blue">おすすめ（いちばん近い）</Tag>}
+                {v.id === rec && <Tag tone="blue">おすすめ（最寄り）</Tag>}
               </div>
               <div className="mt-1 flex gap-3 text-xs text-slate-600 dark:text-slate-300">
                 <Battery v={v} />
@@ -353,9 +352,9 @@ function PasswordModal() {
 // ユーザーの追加・編集
 // ---------------------------------------------------------------
 const ROLE_LABEL: Record<Role, string> = {
-  ADMIN: '管理者 — すべて操作できる',
-  OPERATOR: '作業者 — 運行とタスクを操作できる',
-  VIEWER: '閲覧のみ — 見るだけ（緊急停止は押せる）',
+  ADMIN: '管理者：すべて操作できる',
+  OPERATOR: '作業者：運行とタスクを操作できる',
+  VIEWER: '閲覧者：見るだけ（緊急停止は押せる）',
 };
 
 function UserModal({ userId }: { userId?: string }) {
@@ -410,15 +409,15 @@ function UserModal({ userId }: { userId?: string }) {
               <span className="text-slate-500">{ROLE_LABEL[r]}</span>
             </label>
           ))}
-          {self && <div className="text-xs text-slate-500">自分の権限は変更できません（ほかの管理者に変更してもらってください）</div>}
+          {self && <div className="text-xs text-slate-500">自分の権限は変更できません</div>}
         </div>
       </Field>
       {u ? (
-        <Field label="パスワードの再設定" hint="忘れたときだけ入力（8 文字以上）。空のままなら変わりません。本人は後で自分で変更できます">
+        <Field label="パスワードの再設定" hint="変更するときだけ入力（8 文字以上）">
           <input type="password" autoComplete="new-password" className={inputCls} value={pw} onChange={(e) => setPw(e.target.value)} />
         </Field>
       ) : (
-        <Field label="初期パスワード" hint="8 文字以上。最初のログイン後に本人が変更します">
+        <Field label="初期パスワード" hint="8 文字以上">
           <input type="password" className={inputCls} value={pw} onChange={(e) => setPw(e.target.value)} />
         </Field>
       )}
@@ -461,13 +460,12 @@ function VehicleModal({ vehicleId }: { vehicleId?: string }) {
         </>
       }
     >
-      <Field label="車両ID" hint="MQTT のトピック agv/{ID}/… に使われます。登録後は変えられません">
+      <Field label="車両ID" hint="登録後は変えられません">
         <input autoFocus={!v} className={inputCls} value={id} disabled={!!v} onChange={(e) => setId(e.target.value.toUpperCase())} />
       </Field>
       <Field label="表示名">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
       </Field>
-      <div className="text-xs text-slate-500">カメラ映像のURLは、保存する仕組みがまだ無いため登録できません。</div>
     </Frame>
   );
 }

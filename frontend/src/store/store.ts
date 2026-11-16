@@ -236,7 +236,7 @@ export const nav = (path: string) => {
 const ms = (s: string | null | undefined) => (s ? Date.parse(s) : null);
 
 // まだバックエンドに無い機能
-export const NOT_SUPPORTED = 'バックエンドに命令・APIがまだ無いため未対応です';
+export const NOT_SUPPORTED = '未対応です';
 export function notSupported() {
   toast(NOT_SUPPORTED, 'warn');
 }
@@ -1059,7 +1059,7 @@ export function askDeleteVehicle(id: string) {
     detail: [
       'この車両のログもすべて消えます（元に戻せません）。',
       '割り当て済み・実行中のタスクがある車両は削除できません。',
-      '車両が telemetry を送り続けている場合、届いた時点で自動的に再登録されます。',
+      '車両がデータを送り続けている場合は、自動で再登録されます。',
     ],
     check: 'ログも消えることを確認しました',
     ok: '削除する',
@@ -1198,7 +1198,7 @@ export async function directChange(d: { key: string; value: string; reason: stri
 }
 
 // 【仮】デモ中だけ：ほかの管理者が承認したことにする（1人でも2人承認の流れを試せるように）
-export const demoApproveAs = (id: string) => reqAction(() => api.post<ApiReq>(`/change-requests/${id}/demo-approve`), 'ほかの管理者として承認しました（デモ）', '承認に失敗しました');
+export const demoApproveAs = (id: string) => reqAction(() => api.post<ApiReq>(`/change-requests/${id}/demo-approve`), '他の管理者として承認しました（デモ）', '承認に失敗しました');
 
 // ---------------------------------------------------------------
 // 申請の通知（申請の状態から作る。対応が必要なものは、対応するまで出し続ける）

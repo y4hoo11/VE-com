@@ -15,7 +15,7 @@ export function MapPage() {
       <Card
         title={
           <>
-            地図 <span className="text-xs font-normal text-slate-500">{MAP.id}（ROS の agv_navigation/maps）</span>
+            地図 <span className="text-xs font-normal text-slate-500">{MAP.id}</span>
           </>
         }
         bodyClass="relative"
@@ -26,24 +26,18 @@ export function MapPage() {
         <Card title="地図の情報" bodyClass="p-4">
           <Kv
             rows={[
-              ['ファイル', `agv_navigation/maps/${MAP.id}.yaml`],
-              ['大きさ', `${MAP.width.toFixed(1)}m × ${MAP.height.toFixed(1)}m（${MAP.cols} × ${MAP.rows} px）`],
-              ['解像度', `${MAP.resolution} m/px`],
-              ['原点', `(${MAP.originX.toFixed(1)}, ${MAP.originY.toFixed(1)})`],
+              ['大きさ', `${MAP.width.toFixed(1)}m × ${MAP.height.toFixed(1)}m`],
             ]}
           />
-          <div className="mt-2 text-xs text-slate-400">
-            ※ ROS 側の地図と waypoints.yaml をそのまま表示しています（Web からは書き換えません）。地図を変えるときは frontend/src/store/map.ts の読み込み先を、PC1 の mission.yaml の map_id と合わせてください。
-          </div>
         </Card>
         <Card
           title={
             <>
-              地点<span className="text-xs font-normal text-slate-500">waypoints.yaml ・ {WAYPOINTS.length}件</span>
+              地点<span className="text-xs font-normal text-slate-500">{WAYPOINTS.length}件</span>
             </>
           }
           right={
-            <Btn size="sm" admin disabled title="将来対応">
+            <Btn size="sm" admin disabled title="未対応">
               ＋ 追加
             </Btn>
           }
@@ -72,7 +66,6 @@ export function MapPage() {
               </button>
             );
           })}
-          <div className="p-4 text-xs text-slate-400">地点の追加・編集は将来対応です。PC1 の waypoints.yaml に反映する方法を決めてから作ります。</div>
         </Card>
       </div>
     </div>

@@ -47,7 +47,7 @@ export function VehicleDetail() {
           <Card
             title={
               <>
-                カメラ映像<span className="text-xs font-normal text-slate-500">マーカー解析つき（PC1 が配信する MJPEG）</span>
+                カメラ映像
               </>
             }
           >
@@ -289,9 +289,9 @@ function Key({ k, on }: { k: string; on?: boolean }) {
 // カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL を保存する仕組みは未対応
 function Camera({ v }: { v: Vehicle }) {
   const msg = !v.camera
-    ? '📷 カメラ映像のURLが登録されていません（URL を保存する仕組みは未対応）'
+    ? 'カメラ映像が登録されていません'
     : !v.online
-      ? '📷 映像を受信できません（車両がオフライン）'
+      ? '映像を受信できません（車両がオフライン）'
       : null;
   if (msg) {
     return <div className="flex h-full items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;

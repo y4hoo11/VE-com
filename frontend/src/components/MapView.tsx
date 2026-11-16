@@ -227,7 +227,6 @@ function MapModeBar() {
         <>
           <span>
             <b>{v.name}</b> の移動先を地図でクリック
-            <span className="ml-1 text-slate-400">（地点の近くは自動で地点に合わせます）</span>
           </span>
           <span className="text-slate-400">または</span>
           <select
