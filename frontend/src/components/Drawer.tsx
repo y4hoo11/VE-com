@@ -91,6 +91,11 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
       <div className="flex items-center gap-3">
         <VChip v={v} />
         <Battery v={v} />
+        {inDrawer && (
+          <Btn size="sm" onClick={() => nav(`/vehicles/${v.id}`)}>
+            詳細・カメラ
+          </Btn>
+        )}
         <span className="ml-auto text-xs text-slate-500">最終受信 {off || !v.lastHb ? '—' : fmtT(v.lastHb)}</span>
       </div>
 
@@ -190,12 +195,6 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
       >
         {v.status === 'ERROR' ? '停止中' : `■ ${v.name} を緊急停止`}
       </button>
-
-      {inDrawer && (
-        <button type="button" className="block text-sm text-blue-600 hover:underline" onClick={() => nav(`/vehicles/${v.id}`)}>
-          カメラ映像・詳細ページを開く
-        </button>
-      )}
     </>
   );
 }
