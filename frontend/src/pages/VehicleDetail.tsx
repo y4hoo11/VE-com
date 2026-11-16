@@ -1,4 +1,3 @@
-// 車両詳細ページ：カメラを大きく映す。手動操縦（将来）もここに置く
 import { useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { closeDrawer, nav, openLog, S, useStore, veh } from '../store/store';
@@ -40,15 +39,29 @@ export function VehicleDetail() {
 
       <div className="grid grid-cols-[1fr_420px] gap-3">
         <div className="space-y-3">
-          <Card
-            title={
-              <>
-                カメラ映像<span className="text-xs font-normal text-slate-500">マーカー解析つき（PC1 が配信する MJPEG）</span>
-              </>
-            }
-          >
-            <Camera v={v} />
-          </Card>
+          {/* カメラ + センサー。カメラの幅は 800 を変えて調整する */}
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,800px)_1fr]">
+            <Card
+              title={
+                <>
+                  カメラ映像<span className="text-xs font-normal text-slate-500">マーカー解析つき（PC1 が配信する MJPEG）</span>
+                </>
+              }
+            >
+              <Camera v={v} />
+            </Card>
+            <Card
+              title={
+                <>
+                  センサー <Tag tone="amber">準備中</Tag>
+                </>
+              }
+              bodyClass="p-4"
+            >
+              <p className="m-0 text-sm text-slate-400">センサー情報はここに表示します</p>
+            </Card>
+          </div>
+
           <Card
             title={
               <>
@@ -58,13 +71,16 @@ export function VehicleDetail() {
             bodyClass="p-4"
           >
             <div className="flex items-center gap-6">
-              <div className="grid grid-cols-3 gap-1.5 opacity-40">
-                <div />
-                <Key k="W" />
-                <div />
-                <Key k="A" />
-                <Key k="S" />
-                <Key k="D" />
+              <div className="flex items-end gap-3">
+                <div className="grid grid-cols-3 gap-1.5 opacity-40">
+                  <div />
+                  <Key k="W" />
+                  <div />
+                  <Key k="A" />
+                  <Key k="S" />
+                  <Key k="D" />
+                </div>
+                <Key k="SPACE" wide />
               </div>
               <p className="m-0 text-sm text-slate-500">
                 WASD での遠隔操縦は、通信仕様（docs/agv_protocol.md）に Web から操縦する命令がまだ無いので未実装です。
@@ -72,6 +88,7 @@ export function VehicleDetail() {
               </p>
             </div>
           </Card>
+
           <Card title="この車両のログ">
             <table className="w-full text-sm">
               <tbody>
@@ -107,11 +124,18 @@ export function VehicleDetail() {
   );
 }
 
-function Key({ k }: { k: string }) {
-  return <div className="flex h-11 w-11 items-center justify-center rounded-md border-2 border-slate-300 font-bold dark:border-slate-600">{k}</div>;
+function Key({ k, wide }: { k: string; wide?: boolean }) {
+  return (
+    <div
+      className={`flex h-11 ${wide ? 'w-28' : 'w-11'} items-center justify-center rounded-md border-2 border-slate-300 font-bold dark:border-slate-600`}
+    >
+      {k}
+    </div>
+  );
 }
 
 // カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL を保存する仕組みは未対応
+// 高さに上限（max-h-72）を付けて、縦に伸びすぎないようにしている
 function Camera({ v }: { v: Vehicle }) {
   const msg = !v.camera
     ? '📷 カメラ映像のURLが登録されていません（URL を保存する仕組みは未対応）'
@@ -119,10 +143,10 @@ function Camera({ v }: { v: Vehicle }) {
       ? '📷 映像を受信できません（車両がオフライン）'
       : null;
   if (msg) {
-    return <div className="flex aspect-video items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;
+    return <div className="flex aspect-video max-h-72 w-full items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;
   }
   return (
-    <div className="relative aspect-video overflow-hidden rounded-b-xl bg-slate-900">
+    <div className="relative aspect-video max-h-72 w-full overflow-hidden rounded-b-xl bg-slate-900">
       <img src={v.camera} alt={`${v.name} のカメラ映像`} className="h-full w-full object-contain" />
       <div className="absolute top-2 left-3 flex items-center gap-2 text-xs font-bold text-white">
         <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> LIVE ・ {v.name}
