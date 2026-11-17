@@ -3,7 +3,7 @@
 // データはメモリにあるだけで、再読み込みやデモの切り替えで最初に戻る。
 // 実機で確認できるようになったら、このファイルと【仮】の付いた呼び出しを消す。
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
-import { isFree, needApprovals, pathLen, planRoute, SETTING_ITEMS, settingItem, valueError, wpByName, type Level, type Phase, type Pt, type ReqStatus, type TStatus, type VStatus } from '../store/data';
+import { isFree, needApprovals, pathLen, planRoute, scan8At, SETTING_ITEMS, settingItem, valueError, wpByName, type Level, type Phase, type Pt, type ReqStatus, type TStatus, type VStatus } from '../store/data';
 
 const TICK_MS = 200;
 const SPEED = 0.8; // m/s（実機より速め。見ていて分かるように）
@@ -15,6 +15,8 @@ const CHARGE_PER_SEC = 0.5; // 充電中に増えるバッテリー（%）
 type DemoVehicle = {
   id: string;
   name: string;
+  cameraUrl?: string | null; // デモには映像がないので、登録しても映らない
+  camera2Url?: string | null;
   status: VStatus;
   prevStatus: VStatus;
   x: number;
@@ -296,6 +298,9 @@ function updateProgress(v: DemoVehicle) {
 
 function sendUpdate(v: DemoVehicle) {
   v.lastHb = Date.now();
+  // 障害物までの距離：地図の壁・棚までを測る（本物は LiDAR と超音波。超音波は 2 m まで）
+  const scan8 = scan8At(v, v.theta);
+  const usFront = scan8[0] != null && scan8[0] <= 2 ? scan8[0] : null;
   fire('vehicle:update', {
     id: v.id,
     name: v.name,
@@ -311,6 +316,8 @@ function sendUpdate(v: DemoVehicle) {
       esp32: true,
       lidarHz: 10,
       vbat: 6.4 + v.battery * 0.018,
+      scan8,
+      usFront,
       phase: v.phase ?? '',
       goal: v.goal ?? '',
       // 本物の PC1 と同じ mode（docs/agv_protocol.md 2-2）
@@ -570,6 +577,8 @@ const vehicleJson = (v: DemoVehicle) => ({
   currentTheta: v.theta,
   currentMapId: 'demo',
   lastHeartbeat: iso(v.lastHb),
+  cameraUrl: v.cameraUrl ?? null,
+  camera2Url: v.camera2Url ?? null,
 });
 
 function getLogs(params: Record<string, unknown>): Result {
@@ -869,7 +878,9 @@ function route(method: string, path: string, params: Record<string, unknown>, bo
       const v = need(id);
       if (!v) return fail(404, '車両が見つかりません');
       v.name = String(body.name ?? v.name).trim() || v.name;
-      fire('vehicle:update', { id: v.id, name: v.name });
+      if (body.cameraUrl !== undefined) v.cameraUrl = typeof body.cameraUrl === 'string' ? body.cameraUrl : null;
+      if (body.camera2Url !== undefined) v.camera2Url = typeof body.camera2Url === 'string' ? body.camera2Url : null;
+      fire('vehicle:update', { id: v.id, name: v.name, cameraUrl: v.cameraUrl ?? null, camera2Url: v.camera2Url ?? null });
       return ok(vehicleJson(v));
     }
     case 'DELETE /vehicles/:id': {

@@ -200,6 +200,29 @@ export function planRoute(from: Pt, to: Pt): Pt[] | null {
 }
 
 // ---------------------------------------------------------------
+// 【仮】デモ用：車体のまわり 8 方向の、壁・棚までの距離（LiDAR の代わり）。
+// 並びは telemetry の scan8 と同じ [前, 左前, 左, 左後, 後, 右後, 右, 右前]。range [m] より遠い方向は null
+// ---------------------------------------------------------------
+export function scan8At(p: Pt, theta: number, range = 4): (number | null)[] {
+  const step = MAP.resolution;
+  const hit = (a: number) => {
+    for (let d = step; d <= range; d += step) {
+      const c = toCell({ x: p.x + d * Math.cos(a), y: p.y + d * Math.sin(a) });
+      if (!c || cells[c.row * MAP.cols + c.col] === CELL_OCCUPIED) return d;
+    }
+    return null;
+  };
+  return Array.from({ length: 8 }, (_, i) => {
+    let best: number | null = null;
+    for (let k = -20; k <= 20; k += 5) {
+      const d = hit(theta + ((i * 45 + k) * Math.PI) / 180);
+      if (d != null && (best == null || d < best)) best = d;
+    }
+    return best == null ? null : Math.round(best * 100) / 100;
+  });
+}
+
+// ---------------------------------------------------------------
 // 地点（waypoints.yaml）
 // ---------------------------------------------------------------
 type WaypointYaml = { name?: unknown; label?: unknown; x?: unknown; y?: unknown; theta_deg?: unknown; charger?: unknown; aliases?: unknown };
