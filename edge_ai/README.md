@@ -100,7 +100,7 @@ ros2 run agv_navigation send_task estop / clear / pause / resume / home
 
 ## 3. 実機: ラズパイ
 
-Raspberry Pi OS（64bit, Bookworm）のまま、ROS 2 は Docker で動かす（Ubuntu を入れ直さなくてよい）。
+Raspberry Pi OS（64bit。Bookworm でも Trixie でもよい）のまま、ROS 2 は Docker で動かす（Ubuntu を入れ直さなくてよい）。
 
 ### 準備（最初の1回）
 

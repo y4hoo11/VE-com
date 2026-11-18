@@ -92,7 +92,7 @@ export type TaskPhase =
   | '';            // 開始前に失敗したとき
 
 /** mission_manager の細かい状態（表示用） */
-export type VehicleMode = 'IDLE' | 'OFFLINE' | 'NAV' | 'WAIT' | 'PAUSED' | 'HOLD' | 'RETRY_WAIT';
+export type VehicleMode = 'IDLE' | 'OFFLINE' | 'NAV' | 'WAIT' | 'PAUSED' | 'HOLD' | 'RETRY_WAIT' | 'MANUAL'; // MANUAL = 手動操縦中
 
 // =====================================================================
 // 3. Web → 車両: agv/{id}/command （QoS 1）
@@ -136,13 +136,26 @@ export type SetPoseCommand =
   | { action: 'SET_POSE'; x: number; y: number; theta: number } // theta [rad]
   | { action: 'SET_POSE'; target: string };
 
+/**
+ * 手動操縦（Web のキーボード操縦）。キーを押している間 0.2 秒ごとに送り、離したら 0, 0 を1回送る
+ * - 上限 0.3 m/s・1.0 rad/s（mission.yaml の manual）。0.5 秒届かなければ車両が止まる
+ * - タスク実行中・待ち行列があるとき・緊急停止中は無視される
+ * - 車なのでその場では回れない（linear 0 で angular だけだとハンドルを切るだけ）
+ */
+export interface ManualDriveCommand {
+  action: 'MANUAL_DRIVE';
+  linear: number;           // m/s。前が +
+  angular: number;          // rad/s。左回りが +
+}
+
 export type AgvCommand =
   | TaskAssignCommand
   | GotoCommand
   | ReturnHomeCommand
   | SimpleActionCommand
   | CancelTaskCommand
-  | SetPoseCommand;
+  | SetPoseCommand
+  | ManualDriveCommand;
 
 /** 全車両一斉停止: agv/broadcast/stop */
 export interface BroadcastStop {
@@ -190,11 +203,13 @@ export type AgvTelemetry = Partial<NavTelemetry> & Partial<RobotInfoTelemetry>;
 // =====================================================================
 
 export interface TaskProgress {
-  taskId: string;
+  taskId: string | null;     // GOTO / RETURN_HOME（Web のタスクではない単発の移動）のときは null
   status: TaskProgressStatus;
   phase: TaskPhase;
   progress: number;          // 0〜100 %
   message: string;           // "Dock-A へ移動中" など
+  command?: 'GOTO' | 'RETURN_HOME'; // taskId が null のときだけ付く
+  goal?: string;             // taskId が null のときだけ付く。行き先の地点名
 }
 
 // =====================================================================
