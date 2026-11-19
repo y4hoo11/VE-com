@@ -76,7 +76,19 @@ const readName = (name: unknown): string | null => {
   return t && t.length <= NAME_MAX ? t : null;
 };
 
-/** POST /api/vehicles  ボディ: { id, name } */
+// カメラ映像の URL。undefined = 送られていない（変えない）、null = 空欄にする、文字列 = その URL、false = 形が正しくない
+const URL_MAX = 300;
+const readCameraUrl = (u: unknown): string | null | undefined | false => {
+  if (u === undefined) return undefined;
+  if (u === null) return null;
+  if (typeof u !== 'string') return false;
+  const t = u.trim();
+  if (!t) return null;
+  return t.length <= URL_MAX && /^https?:\/\/\S+$/i.test(t) ? t : false;
+};
+const CAMERA_URL_ERROR = 'カメラの URL は http:// か https:// で始まる形にしてください';
+
+/** POST /api/vehicles  ボディ: { id, name, cameraUrl?, camera2Url? } */
 export const createVehicle = async (req: Request, res: Response) => {
   const id = typeof req.body?.id === 'string' ? req.body.id.trim().toUpperCase() : '';
   const name = readName(req.body?.name);
@@ -87,6 +99,9 @@ export const createVehicle = async (req: Request, res: Response) => {
   if (!name) {
     return res.status(400).json({ error: `表示名は1〜${NAME_MAX}文字で入力してください` });
   }
+  const cameraUrl = readCameraUrl(req.body?.cameraUrl);
+  const camera2Url = readCameraUrl(req.body?.camera2Url);
+  if (cameraUrl === false || camera2Url === false) return res.status(400).json({ error: CAMERA_URL_ERROR });
 
   try {
     const exists = await prisma.vehicle.findUnique({ where: { id } });
@@ -94,7 +109,7 @@ export const createVehicle = async (req: Request, res: Response) => {
 
     // まだ一度も通信していないので、オフラインで登録する（telemetry が届けば自動で切り替わる）
     const vehicle = await prisma.vehicle.create({
-      data: { id, name, status: VehicleStatus.OFFLINE },
+      data: { id, name, status: VehicleStatus.OFFLINE, cameraUrl, camera2Url },
     });
     socketService.broadcastVehiclesChanged();
     res.status(201).json(vehicle);
@@ -104,19 +119,22 @@ export const createVehicle = async (req: Request, res: Response) => {
   }
 };
 
-/** PATCH /api/vehicles/:id  ボディ: { name } */
+/** PATCH /api/vehicles/:id  ボディ: { name, cameraUrl?, camera2Url? }（カメラは送られたものだけ変える） */
 export const updateVehicle = async (req: Request, res: Response) => {
   const id = getIdParam(req.params.id);
   const name = readName(req.body?.name);
   if (!id) return res.status(400).json({ error: '無効な車両IDです' });
   if (!name) return res.status(400).json({ error: `表示名は1〜${NAME_MAX}文字で入力してください` });
+  const cameraUrl = readCameraUrl(req.body?.cameraUrl);
+  const camera2Url = readCameraUrl(req.body?.camera2Url);
+  if (cameraUrl === false || camera2Url === false) return res.status(400).json({ error: CAMERA_URL_ERROR });
 
   try {
     const exists = await prisma.vehicle.findUnique({ where: { id } });
     if (!exists) return res.status(404).json({ error: '車両が見つかりません' });
 
-    const vehicle = await prisma.vehicle.update({ where: { id }, data: { name } });
-    socketService.broadcastVehicleUpdate({ id, name });
+    const vehicle = await prisma.vehicle.update({ where: { id }, data: { name, cameraUrl, camera2Url } });
+    socketService.broadcastVehicleUpdate({ id, name, cameraUrl: vehicle.cameraUrl, camera2Url: vehicle.camera2Url });
     res.json(vehicle);
   } catch (error) {
     console.error('車両の更新エラー:', error);

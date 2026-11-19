@@ -48,6 +48,8 @@ export interface VehicleUpdatePayload {
   // 異常の種類（docs/agv_protocol.md 2-3 の code と source）。画面で「解除が必要か」を分けるのに使う
   emergencyCode?: string | null;
   emergencySource?: string | null;
+  cameraUrl?: string | null; // カメラ映像の URL（車両の設定で変えたとき）
+  camera2Url?: string | null;
   // ROS から届いた telemetry のうち、DB に保存しない項目（速度・自己位置の確かさ・温度など）
   // 届いたものだけ入る。画面はこれをそのまま表示する
   telemetry?: VehicleTelemetryExtra;
@@ -67,6 +69,10 @@ export interface VehicleTelemetryExtra {
   mode?: string;
   note?: string;
   paused?: boolean; // 一時停止中か（ROS 側に追加をお願いしている項目）
+  // 車体まわりの障害物までの距離 [m]（ROS 側に追加をお願いしている項目）
+  // scan8: LiDAR を 8 方向に分けた、それぞれの一番近い距離。[前, 左前, 左, 左後, 後, 右後, 右, 右前]（前から反時計回りに 45° ずつ、各 ±22.5°）。点が無い方向は null
+  scan8?: (number | null)[];
+  usFront?: number | null; // 前の超音波センサー（ESP32 の us_mm を m にしたもの）。未接続・範囲外は null
 }
 
 // タスクの進捗（PC1 の agv/{id}/task を画面へ流すもの）

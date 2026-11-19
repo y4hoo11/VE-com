@@ -6,6 +6,10 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// AGV-01 のカメラ映像（ラズパイ agv-pi の配信）
+const AGV01_CAMERA = 'http://agv-pi.local:8090/stream.mjpg'; // Pi カメラ
+const AGV01_CAMERA2 = 'http://agv-pi.local:8091/'; // USB カメラ
+
 async function main() {
   console.log('🌱 データベースの初期化とテストデータの投入を開始します...');
 
@@ -36,10 +40,13 @@ async function main() {
   // 2. 車両 (AGV) の作成
   const vehicleAlpha = await prisma.vehicle.upsert({
     where: { id: 'AGV-01' },
-    update: {},
+    // カメラは実機（agv-pi）の配信先。すでにある DB にも入るよう、update でも入れる
+    update: { cameraUrl: AGV01_CAMERA, camera2Url: AGV01_CAMERA2 },
     create: {
       id: 'AGV-01',
       name: 'AGV Alpha',
+      cameraUrl: AGV01_CAMERA,
+      camera2Url: AGV01_CAMERA2,
       status: VehicleStatus.IDLE,
       batteryLevel: 90,
       currentX: 0.0,
