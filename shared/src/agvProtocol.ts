@@ -245,23 +245,17 @@ export interface PlannedPath {
 }
 
 // =====================================================================
-// 7b. 車両 → Web: agv/{id}/clearance （表示用、1 秒に 5 回）
+// 7b. 車両 → Web: agv/{id}/clearance （表示用、1 秒に 5 回。docs/agv_protocol.md 2-7）
 // =====================================================================
 
-/** LiDAR で見えている物までの距離。車体のまわり 8 方向、車体の外形から [cm]。物が見えない方向は null */
-export type ClearanceSector =
-  | 'frontLeftCorner'
-  | 'frontLeftCenter'
-  | 'frontRightCenter'
-  | 'frontRightCorner'
-  | 'rearLeftCorner'
-  | 'rearLeftCenter'
-  | 'rearRightCenter'
-  | 'rearRightCorner';
-
+/**
+ * 障害物までの距離 [m]。telemetry の scan8・usFront と同じ形
+ * scan8 の並びは [前, 左前, 左, 左後, 後, 右後, 右, 右前]（前から反時計回りに 45° ずつ、各 ±22.5°）。
+ * 車体の外形から測る。物が見えない方向は null
+ */
 export interface Clearance {
-  sectors: Record<ClearanceSector, number | null>;
-  nearest: number | null;    // 8 方向でいちばん近い距離（全部 null なら null）
+  scan8: (number | null)[];
+  usFront: number | null;    // 前の超音波。未接続・範囲外は null
 }
 
 // =====================================================================

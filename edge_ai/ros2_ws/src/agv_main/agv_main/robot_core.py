@@ -68,38 +68,30 @@ def scan_to_points(ranges, angle_min: float, angle_increment: float, mount: tupl
     return np.column_stack([mount[0] + r * np.cos(a), mount[1] + r * np.sin(a)])
 
 
-# Web の車両詳細ページの「アラウンドビュー」（SonarView）に出す 8 方向。
-# 角度は「前 = 0°、時計回りが +（右が +）」で、Web 側の表示と同じ。45° ずつで車体のまわりを全部覆う
-CLEARANCE_SECTORS = (
-    ("frontRightCenter", 0.0, 45.0),
-    ("frontRightCorner", 45.0, 90.0),
-    ("rearRightCorner", 90.0, 135.0),
-    ("rearRightCenter", 135.0, 180.0),
-    ("rearLeftCenter", -180.0, -135.0),
-    ("rearLeftCorner", -135.0, -90.0),
-    ("frontLeftCorner", -90.0, -45.0),
-    ("frontLeftCenter", -45.0, 0.0),
-)
+# Web の車両詳細ページの「アラウンドビュー」（SonarView）に出す 8 方向（Web の scan8 と同じ並び）。
+# 前から反時計回り（左回り）に 45° ずつ、それぞれ ±22.5° の範囲
+SCAN8_NAMES = ("前", "左前", "左", "左後", "後", "右後", "右", "右前")
 
 
-def clearance_sectors(points, length: float, width: float) -> dict[str, int | None]:
-    """車体のまわり 8 方向それぞれで、車体の外形（長方形）からいちばん近い物までの距離 [cm]。
+def scan8(points, length: float, width: float) -> list[float | None]:
+    """車体のまわり 8 方向それぞれで、車体の外形（長方形）からいちばん近い物までの距離 [m]。
 
-    points は車体座標 (base_link。x が前、y が左) の点 [N,2]。物が見えない方向は None。
+    points は車体座標 (base_link。x が前、y が左) の点 [N,2]。並びは SCAN8_NAMES。物が見えない方向は None。
     車体の外形の内側に入る点（車体自身の反射）は数えない。
     """
-    out: dict[str, int | None] = {name: None for name, _, _ in CLEARANCE_SECTORS}
+    out: list[float | None] = [None] * 8
     if points is None or len(points) == 0:
         return out
     p = np.asarray(points, dtype=np.float64)
     x, y = p[:, 0], p[:, 1]
     d = np.hypot(np.maximum(np.abs(x) - length / 2.0, 0.0), np.maximum(np.abs(y) - width / 2.0, 0.0))
-    ang = -np.degrees(np.arctan2(y, x))          # 前 0°、時計回り +。範囲は -180 〜 180 未満
+    ang = np.degrees(np.arctan2(y, x))                        # 前 0°、左回り +
+    k = np.floor(((ang + 22.5) % 360.0) / 45.0).astype(int) % 8   # 0 = 前（-22.5〜22.5°）、1 = 左前 …
     outside = d > 0.0
-    for name, a0, a1 in CLEARANCE_SECTORS:
-        m = outside & (ang >= a0) & (ang < a1)
+    for i in range(8):
+        m = outside & (k == i)
         if m.any():
-            out[name] = int(round(float(d[m].min()) * 100.0))
+            out[i] = round(float(d[m].min()), 2)
     return out
 
 
@@ -145,15 +137,13 @@ class RobotCore:
             self.scan_time = now
         return pts
 
-    def clearance(self, now: float, max_age: float = 1.0) -> dict | None:
-        """8 方向の距離（Web のアラウンドビュー用）。LiDAR のデータが古いときは None。"""
+    def scan8(self, now: float, max_age: float = 1.0) -> list[float | None] | None:
+        """8 方向の距離 [m]（Web のアラウンドビュー用）。LiDAR のデータが古いときは None。"""
         with self.lock:
             pts, st = self.points, self.scan_time
         if pts is None or now - st > max_age:
             return None
-        sectors = clearance_sectors(pts, self.body_length, self.body_width)
-        near = [v for v in sectors.values() if v is not None]
-        return {"sectors": sectors, "nearest": min(near) if near else None}
+        return scan8(pts, self.body_length, self.body_width)
 
     def on_telemetry(self, t: dict, now: float) -> bool:
         return self.odom.update(t, now)

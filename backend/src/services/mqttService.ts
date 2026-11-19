@@ -2,7 +2,7 @@ import { mqttClient } from '../config/mqtt';
 import { socketService } from './socketService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
-import { CLEARANCE_KEYS, type VehicleClearancePayload, type VehicleTelemetryExtra } from '../types';
+import type { VehicleClearancePayload, VehicleTelemetryExtra } from '../types';
 import { taskProgressService } from './taskProgressService';
 import { emergencyState } from './emergencyState';
 
@@ -21,13 +21,14 @@ function readPath(m: Record<string, unknown>) {
   return { points, goal };
 }
 
-// agv/{id}/clearance（8 方向の距離 [cm]）を画面の形にする。数でない値は null（物が見えない）にする
-function readClearance(m: Record<string, unknown>): Omit<VehicleClearancePayload, 'id'> {
-  const src = (m.sectors ?? {}) as Record<string, unknown>;
-  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
-  const sectors = Object.fromEntries(CLEARANCE_KEYS.map((k) => [k, num(src[k])])) as VehicleClearancePayload['sectors'];
-  const values = Object.values(sectors).filter((v): v is number => v !== null);
-  return { sectors, nearest: values.length ? Math.min(...values) : null };
+// agv/{id}/clearance（scan8・usFront [m]）を画面の形にする。数でない値は null（点なし・未接続）にする
+// scan8 が 8 個でなければ捨てる（null を返す）
+function readClearance(m: Record<string, unknown>): Omit<VehicleClearancePayload, 'id'> | null {
+  const dist = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+  if (!Array.isArray(m.scan8) || m.scan8.length !== 8) return null;
+  const out: Omit<VehicleClearancePayload, 'id'> = { scan8: m.scan8.map(dist) };
+  if ('usFront' in m) out.usFront = dist(m.usFront);
+  return out;
 }
 
 // telemetry の追加項目のうち、画面にそのまま流すもの（型が合うものだけ通す）
@@ -197,7 +198,8 @@ class MqttService {
           await taskProgressService.handle(agvId, message);
         } else if (topic.endsWith('/clearance')) {
           // LiDAR で見えている物の 8 方向の距離（2-7）。DB には保存せず、画面に流すだけ
-          socketService.broadcastVehicleClearance({ id: agvId, ...readClearance(message) });
+          const c = readClearance(message);
+          if (c) socketService.broadcastVehicleClearance({ id: agvId, ...c });
         } else if (topic.endsWith('/path')) {
           // Nav2 が計画した経路（2-5）。DB には保存せず、画面に流すだけ
           socketService.broadcastVehiclePath({ id: agvId, ...readPath(message) });

@@ -62,7 +62,7 @@ export function VehicleDetail() {
             bodyClass="min-h-0 flex-1"
             className="flex flex-col"
           >
-            <SonarView vehicleId={v.id} online={v.online} />
+            <SonarView v={v} />
           </Card>
         </div>
 

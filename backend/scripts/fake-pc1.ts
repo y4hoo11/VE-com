@@ -1,8 +1,8 @@
 // scripts/fake-pc1.ts
 // 偽の PC1（ROS 側）。実機がなくても Web をつないで確かめるための道具。
 // docs/agv_protocol.md のとおりに MQTT で話す：
-//   送る … agv/{id}/telemetry（2Hz と 1Hz）、agv/{id}/task、agv/{id}/path、agv/{id}/online、agv/{id}/emergency、
-//          agv/{id}/clearance（5Hz。LiDAR で見えている物の 8 方向の距離。値は作りもの）
+//   送る … agv/{id}/telemetry（2Hz と 1Hz）、agv/{id}/task、agv/{id}/path、agv/{id}/online、agv/{id}/emergency
+//   ※ 障害物までの距離（scan8・usFront）は、本物は agv/{id}/clearance（5Hz）で送るが、偽物は 1Hz の telemetry に入れている
 //   受ける … agv/{id}/command（TASK_ASSIGN・PAUSE・RESUME・CANCEL_TASK・CONFIRM・GOTO・RETURN_HOME・SET_POSE・
 //            EMERGENCY_STOP・CLEAR_EMERGENCY・MANUAL_DRIVE）と agv/broadcast/stop
 //
@@ -67,7 +67,6 @@ class FakeVehicle {
   waitingConfirm = false;
   manual: { linear: number; angular: number; until: number } | null = null;
   lastTaskPub = 0;
-  seed = 0; // 何台か出すときに、作りもののセンサーの値をずらす
   client: MqttClient;
 
   constructor(
@@ -75,7 +74,6 @@ class FakeVehicle {
     index: number,
   ) {
     const home = resolve('Home') ?? { x: 0, y: 0 };
-    this.seed = index;
     this.x = home.x + index * 0.6; // 何台か出すときは少しずらす
     this.y = home.y;
     this.client = mqtt.connect(BROKER, {
@@ -339,19 +337,6 @@ class FakeVehicle {
     });
   }
 
-  // ラズパイ（serial_bridge）の clearance（5Hz）。8 方向の距離 [cm]。値は作りもので、ゆっくり近づいたり離れたりする
-  sendClearance() {
-    const t = Date.now() / 1000;
-    const keys = ['frontLeftCorner', 'frontLeftCenter', 'frontRightCenter', 'frontRightCorner', 'rearLeftCorner', 'rearLeftCenter', 'rearRightCenter', 'rearRightCorner'];
-    const sectors: Record<string, number | null> = {};
-    keys.forEach((k, i) => {
-      const d = Math.round(110 + 80 * Math.sin(t / 3 + i * 0.8 + this.seed));
-      sectors[k] = d > 180 ? null : d; // 遠いときは「見えない」（null）
-    });
-    const near = Object.values(sectors).filter((v): v is number => v !== null);
-    this.pub('clearance', { sectors, nearest: near.length ? Math.min(...near) : null });
-  }
-
   close() {
     this.pub('online', { online: false }, true);
     this.client.end();
@@ -378,7 +363,6 @@ setInterval(() => {
     v.tick(dt);
     if (n % 5 === 0) v.sendNav(); // 2Hz
     if (n % 10 === 0) v.sendRobot(); // 1Hz
-    if (n % 2 === 0) v.sendClearance(); // 5Hz
   }
 }, TICK_MS);
 

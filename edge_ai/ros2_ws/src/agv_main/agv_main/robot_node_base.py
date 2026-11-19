@@ -12,7 +12,7 @@
   agv/safety       std_msgs/String(JSON) 安全ガードの状態（変化時 + 1Hz）
   agv/events       std_msgs/String(JSON) Web に知らせる異常（mqtt_bridge が agv/{id}/emergency へ）
   agv/robot_info   std_msgs/String(JSON) 電池・温度など 1Hz（mqtt_bridge が agv/{id}/telemetry へ）
-  agv/clearance    std_msgs/String(JSON) LiDAR で見えている物の 8 方向の距離 5Hz（mqtt_bridge が agv/{id}/clearance へ）
+  agv/clearance    std_msgs/String(JSON) 障害物までの距離 scan8（LiDAR 8 方向）・usFront（超音波）5Hz（mqtt_bridge が agv/{id}/clearance へ）
 サービス:
   zero_yaw         std_srvs/Trigger      IMU のヨー角を 0 に（止まっているときに）
 静的 TF（robot.yaml の laser / camera_mount から）:
@@ -328,11 +328,15 @@ class RobotBridgeBase(Node):
         return round((len(ts) - 1) / max(1e-3, ts[-1] - ts[0]), 1)
 
     def _clearance_tick(self) -> None:
-        """LiDAR で見えている物の距離を 8 方向にまとめて出す（mqtt_bridge が agv/{id}/clearance へ）。
+        """障害物までの距離を出す（mqtt_bridge が agv/{id}/clearance へ。Web のアラウンドビュー用）。
+        scan8 = LiDAR を 8 方向に分けた、車体の外形からの距離 [m]、usFront = 前の超音波 [m]（無ければ null）。
         LiDAR が止まっているときは出さない（Web 側が「データなし」にする）"""
-        c = self.core.clearance(time.time())
-        if c is not None:
-            self.pub_clearance.publish(json_msg(c))
+        s8 = self.core.scan8(time.time())
+        if s8 is None:
+            return
+        us = (self.last_tel or {}).get("us_mm", -1)
+        us_front = round(us / 1000.0, 2) if isinstance(us, (int, float)) and us > 0 else None
+        self.pub_clearance.publish(json_msg({"scan8": s8, "usFront": us_front}))
 
     def _info_tick(self) -> None:
         info = {"name": str(self.cfg["name"]), "esp32": bool(self.esp.online), "lidarHz": self.lidar_hz()}

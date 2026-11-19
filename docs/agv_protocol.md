@@ -172,20 +172,19 @@ PC1 の `mqtt_bridge` が接続時に `{"online":true}` を retain で出す。�
 
 ### 2-7. 車両 → (Web): `agv/{id}/clearance`（表示用）
 
-LiDAR で見えている物までの距離を、車体のまわり 8 方向にまとめたもの。車両詳細ページの「物理センサー（アラウンドビュー）」に出す。
+障害物までの距離。車両詳細ページの「物理センサー（アラウンドビュー）」に出す。
 ラズパイの `serial_bridge` が 1秒に5回（`robot.yaml` の `rates.clearance_hz`）出し、PC1 の `mqtt_bridge` がそのまま MQTT へ流す。QoS 0・retain なし。
 
 ```json
-{"sectors":{"frontLeftCorner":120,"frontLeftCenter":35,"frontRightCenter":null,"frontRightCorner":180,
-            "rearLeftCorner":70,"rearLeftCenter":160,"rearRightCenter":null,"rearRightCorner":95},"nearest":35}
+{"scan8":[0.35,1.2,null,0.7,1.6,null,0.95,1.8],"usFront":null}
 ```
 
-- 距離は **車体の外形（`robot.yaml` の `vehicle.length`・`width` の長方形）から** の距離 [cm]。物が見えない方向は `null`
-- 方向は車体の前を 0° として時計回りに 45° ずつ: 前右中央 0〜45°、前右の角 45〜90°、後ろ右の角 90〜135°、後ろ右中央 135〜180°、
-  後ろ左中央 180〜225°、後ろ左の角 225〜270°、前左の角 270〜315°、前左中央 315〜360°（真横は角の方向に入る）
-- LiDAR のデータが1秒より古いときは送らない（Web は2秒届かなければ「データなし」にする）
-- `nearest` は 8 方向でいちばん近い距離（全部 `null` なら `null`）
-- backend は DB に保存せず、Socket.IO の `vehicle:clearance`（`{id, sectors, nearest}`）で画面に流すだけ
+- `scan8`: LiDAR を 8 方向に分けた、それぞれでいちばん近い物までの距離 [m]。並びは **[前, 左前, 左, 左後, 後, 右後, 右, 右前]**
+  （前から反時計回りに 45° ずつ、各 ±22.5°）。物が見えない方向は `null`
+- 距離は **車体の外形（`robot.yaml` の `vehicle.length`・`width` の長方形）から** 測る。車体の中に入る点（自分の反射）は数えない
+- `usFront`: 前の超音波 [m]。付いていない（`US_ENABLE 0`）・範囲外は `null`
+- LiDAR のデータが1秒より古いときは送らない（Web は3秒届かなければ「データなし」にする）
+- telemetry の `scan8`・`usFront`（偽の PC1・デモが使う）と同じ形。backend は DB に保存せず、Socket.IO の `vehicle:clearance`（`{id, scan8, usFront}`）で画面に流すだけ
 
 ### （廃止）PC1 ⇔ ラズパイの MQTT・カメラの WebSocket
 

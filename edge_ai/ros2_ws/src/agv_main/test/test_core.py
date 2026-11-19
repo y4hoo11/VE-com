@@ -20,7 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 from agv_main import protocol  # noqa: E402
 from agv_main.drive_model import CmdVelConverter, SpeedModel, WheelOdometry  # noqa: E402
-from agv_main.robot_core import ROBOT_DEFAULTS, RobotCore, clearance_sectors, deep_merge, scan_to_points  # noqa: E402
+from agv_main.robot_core import ROBOT_DEFAULTS, RobotCore, deep_merge, scan8, scan_to_points  # noqa: E402
 from agv_main.rplidar_a1 import bin_scan, decode_node  # noqa: E402
 from agv_main.safety import BLOCKED, CLEAR, ESTOP, HOLD, NO_COMMAND, NO_LIDAR, SLOW, SafetyGuard  # noqa: E402
 from agv_main.sim_world import SimWorld  # noqa: E402
@@ -210,35 +210,39 @@ class TestRobotCore(unittest.TestCase):
         pts = scan_to_points([1.0], 0.0, 0.0, (0.0, 0.0, math.pi), 0.1, 8.0)   # 逆向きに付けた LiDAR の正面 = 車の後ろ
         self.assertAlmostEqual(pts[0][0], -1.0, places=6)
 
-    def test_clearance_sectors(self):
-        """Web のアラウンドビュー用の 8 方向。角度は前 0°・時計回り +（右が +）、距離は車体の外形から [cm]"""
+    def test_scan8(self):
+        """Web のアラウンドビュー用の 8 方向。並びは [前, 左前, 左, 左後, 後, 右後, 右, 右前]、距離は車体の外形から [m]"""
         L, W = 0.42, 0.19
         pts = np.array([
-            [0.21 + 0.30, 0.05],    # 前・少し左 → 前左中央、車体の前の面から 30cm
-            [0.21 + 0.50, -0.05],   # 前・少し右 → 前右中央、50cm
-            [0.0, -(0.095 + 0.20)], # 真右 → 右後ろの角（90°〜135° の始まり）、20cm
-            [-(0.21 + 1.00), 0.0],  # 真後ろ → 後ろ左中央（-180°）、100cm
-            [0.10, 0.0],            # 車体の中（自分の反射）→ 数えない
+            [0.21 + 0.30, 0.05],     # 前（少し左）→ 前、車体の前の面から 0.30m
+            [0.0, 0.095 + 0.20],     # 真左 → 左、0.20m
+            [0.0, -(0.095 + 0.50)],  # 真右 → 右、0.50m
+            [-(0.21 + 1.00), 0.0],   # 真後ろ → 後、1.00m
+            [0.21 + 0.40, 0.095 + 0.40],  # 左前 45° あたり → 左前
+            [0.10, 0.0],             # 車体の中（自分の反射）→ 数えない
         ])
-        c = clearance_sectors(pts, L, W)
-        self.assertEqual(c["frontLeftCenter"], 30)
-        self.assertEqual(c["frontRightCenter"], 50)
-        self.assertEqual(c["rearRightCorner"], 20)
-        self.assertEqual(c["rearLeftCenter"], 100)
-        self.assertIsNone(c["frontLeftCorner"])
-        self.assertEqual(len(c), 8)
+        s8 = scan8(pts, L, W)
+        self.assertEqual(len(s8), 8)
+        self.assertAlmostEqual(s8[0], 0.30)
+        self.assertAlmostEqual(s8[2], 0.20)
+        self.assertAlmostEqual(s8[6], 0.50)
+        self.assertAlmostEqual(s8[4], 1.00)
+        self.assertIsNotNone(s8[1])
+        self.assertIsNone(s8[3])      # 左後には何もない
+        self.assertIsNone(s8[7])
 
-    def test_clearance_from_scan(self):
+    def test_scan8_from_scan(self):
         core = self.make()
         now = 10.0
-        self.assertIsNone(core.clearance(now))          # LiDAR のデータがまだ無い
+        self.assertIsNone(core.scan8(now))          # LiDAR のデータがまだ無い
         ranges = [math.inf] * 360
-        ranges[180] = 0.35   # 前に 0.35m（LiDAR は車体中心から前に 0.05m）→ 車体の前の面から 19cm
+        ranges[180] = 0.35   # 前に 0.35m（LiDAR は車体中心から前に 0.05m）→ 車体の前の面から 0.19m
         core.set_scan(ranges, -math.pi, 2 * math.pi / 360, now)
-        c = core.clearance(now + 0.2)
-        self.assertEqual(c["nearest"], 19)
-        self.assertIn(c["sectors"]["frontRightCenter"], (19,))  # ちょうど 0° は前右中央に入る
-        self.assertIsNone(core.clearance(now + 5.0))     # データが古い
+        s8 = core.scan8(now + 0.2)
+        self.assertAlmostEqual(s8[0], 0.19)
+        self.assertEqual(sum(v is not None for v in s8), 1)
+        self.assertIsNone(core.scan8(now + 5.0))     # データが古い
+
 
 
 class TestSim(unittest.TestCase):

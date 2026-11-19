@@ -92,24 +92,12 @@ export interface VehiclePathPayload {
   goal: { x: number; y: number } | null;
 }
 
-// LiDAR で見えている物の距離（ラズパイの agv/{id}/clearance）。車体のまわり 8 方向、車体の外形から [cm]
-// 物が見えない方向は null。車両詳細ページのアラウンドビューに出す
-export const CLEARANCE_KEYS = [
-  'frontLeftCorner',
-  'frontLeftCenter',
-  'frontRightCenter',
-  'frontRightCorner',
-  'rearLeftCorner',
-  'rearLeftCenter',
-  'rearRightCenter',
-  'rearRightCorner',
-] as const;
-export type ClearanceKey = (typeof CLEARANCE_KEYS)[number];
-
+// 障害物までの距離（ラズパイの agv/{id}/clearance、1秒に5回）。形は telemetry の scan8・usFront と同じ [m]
+// 車両詳細ページのアラウンドビューに出す。DB には保存しない
 export interface VehicleClearancePayload {
   id: string;
-  sectors: Record<ClearanceKey, number | null>;
-  nearest: number | null;
+  scan8: (number | null)[]; // [前, 左前, 左, 左後, 後, 右後, 右, 右前]。点が無い方向は null
+  usFront?: number | null; // 前の超音波。未接続・範囲外は null（届かなければ項目なし）
 }
 
 // サーバーの接続状態（画面のヘッダー・お知らせ帯に出す）
