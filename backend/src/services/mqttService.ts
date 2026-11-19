@@ -2,12 +2,12 @@ import { mqttClient } from '../config/mqtt';
 import { socketService } from './socketService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
-import type { VehicleTelemetryExtra } from '../types';
+import { CLEARANCE_KEYS, type VehicleClearancePayload, type VehicleTelemetryExtra } from '../types';
 import { taskProgressService } from './taskProgressService';
 import { emergencyState } from './emergencyState';
 
 // 受信するトピック（docs/agv_protocol.md 2-2〜2-6）
-const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online'];
+const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online', 'agv/+/clearance'];
 
 // agv/{id}/path の points（[[x,y],...]）を画面の形にする。おかしな値は捨てる
 function readPath(m: Record<string, unknown>) {
@@ -19,6 +19,15 @@ function readPath(m: Record<string, unknown>) {
   const g = m.goal as { x?: unknown; y?: unknown } | undefined;
   const goal = g && typeof g.x === 'number' && typeof g.y === 'number' ? { x: g.x, y: g.y } : null;
   return { points, goal };
+}
+
+// agv/{id}/clearance（8 方向の距離 [cm]）を画面の形にする。数でない値は null（物が見えない）にする
+function readClearance(m: Record<string, unknown>): Omit<VehicleClearancePayload, 'id'> {
+  const src = (m.sectors ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
+  const sectors = Object.fromEntries(CLEARANCE_KEYS.map((k) => [k, num(src[k])])) as VehicleClearancePayload['sectors'];
+  const values = Object.values(sectors).filter((v): v is number => v !== null);
+  return { sectors, nearest: values.length ? Math.min(...values) : null };
 }
 
 // telemetry の追加項目のうち、画面にそのまま流すもの（型が合うものだけ通す）
@@ -186,6 +195,9 @@ class MqttService {
         } else if (topic.endsWith('/task')) {
           // タスクの進捗（docs/agv_protocol.md 2-4）
           await taskProgressService.handle(agvId, message);
+        } else if (topic.endsWith('/clearance')) {
+          // LiDAR で見えている物の 8 方向の距離（2-7）。DB には保存せず、画面に流すだけ
+          socketService.broadcastVehicleClearance({ id: agvId, ...readClearance(message) });
         } else if (topic.endsWith('/path')) {
           // Nav2 が計画した経路（2-5）。DB には保存せず、画面に流すだけ
           socketService.broadcastVehiclePath({ id: agvId, ...readPath(message) });

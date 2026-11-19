@@ -10,6 +10,7 @@ MQTT のトピックと JSON の形は前と同じ（docs/agv_protocol.md の 2-
     agv/{id}/task      ◄────────────── agv/task_status (mission_manager)
     agv/{id}/emergency ◄────────────── agv/events (ラズパイ) + agv/mission_events (mission_manager)
     agv/{id}/path      ◄────────────── plan (nav_msgs/Path, Nav2 の経路) を間引いたもの
+    agv/{id}/clearance ◄────────────── agv/clearance (ラズパイ, 5Hz。LiDAR で見えている物の 8 方向の距離)
     agv/{id}/online    ◄────────────── このノードの接続状態（retain + 遺言 LWT）
 
 paho-mqtt は Dockerfile で python3-paho-mqtt を入れてある（1.x / 2.x どちらでも動く）。
@@ -65,6 +66,7 @@ class MqttBridge(Node):
         self.create_subscription(String, "agv/events", lambda m: self._forward("emergency", m, qos=1), EVENTS)
         self.create_subscription(String, "agv/mission_events", lambda m: self._forward("emergency", m, qos=1), EVENTS)
         self.create_subscription(Path, "plan", self._on_plan, 1)
+        self.create_subscription(String, "agv/clearance", lambda m: self._forward("clearance", m), 5)
 
         cid = str(mc["client_id"]) or f"ros_bridge_{self.id}"
         self.client = make_client(cid)

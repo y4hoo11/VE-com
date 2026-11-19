@@ -218,6 +218,24 @@ export function useStore() {
   return S;
 }
 
+// ---------------------------------------------------------------
+// LiDAR で見えている物の距離（車両詳細ページのアラウンドビュー用、agv/{id}/clearance）。
+// 1秒に5回届くので、S に入れて画面全体を描き直さないよう、ここで別に持って SonarView だけが読む
+// ---------------------------------------------------------------
+export type Clearance = { sectors: Record<string, number | null>; nearest: number | null; at: number };
+const clearances = new Map<string, Clearance>();
+const clearanceListeners = new Set<() => void>();
+const subscribeClearance = (f: () => void) => {
+  clearanceListeners.add(f);
+  return () => {
+    clearanceListeners.delete(f);
+  };
+};
+/** その車両の最新の距離（まだ届いていなければ null）。古いかどうかは at（受け取った時刻）で見る */
+export function useClearance(id: string): Clearance | null {
+  return useSyncExternalStore(subscribeClearance, () => clearances.get(id) ?? null);
+}
+
 // 表示の設定をブラウザに保存する
 export function savePrefs() {
   try {
@@ -635,6 +653,12 @@ function listen() {
     emit();
   });
 
+  // LiDAR で見えている物の 8 方向の距離（agv/{id}/clearance）
+  on('vehicle:clearance', (p: { id: string; sectors: Record<string, number | null>; nearest: number | null }) => {
+    clearances.set(p.id, { sectors: p.sectors ?? {}, nearest: p.nearest ?? null, at: Date.now() });
+    clearanceListeners.forEach((f) => f());
+  });
+
   // Nav2 が計画した経路（PC1 の agv/{id}/path）。今の位置から経路をつなげて描く
   on('vehicle:path', (p: { id: string; points: Pt[] }) => {
     const v = veh(p.id);
@@ -711,6 +735,7 @@ export function startSession(user: { username: string; role: string }, logout: (
 
 export function endSession() {
   inSession = false;
+  clearances.clear();
   Object.assign(S, { requests: [], loaded: false, vehicles: [], tasks: [], logs: [], notes: [], drawer: null, modal: null, popover: null, mapMode: null });
   emit();
 }

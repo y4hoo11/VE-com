@@ -1,10 +1,11 @@
 // 物理センサー（アラウンドビュー）：車体のまわり 8 方向の障害物までの距離を、近いほど内側まで点く円弧で表す。
 // もとは緊急制御画面（otyazuke さん作）にあった表示を、車両詳細ページ用の部品にしたもの。
 //
-// 値は telemetry の scan8（LiDAR を 8 方向に分けた、それぞれの一番近い距離）と usFront（前の超音波）。
-// どちらも PC1 の mqtt_bridge が送る（ROS 側に追加をお願いしている項目）。届いていないときは「データなし」。
+// 距離は LiDAR で見えている物から作る（ラズパイの serial_bridge が 8 方向にまとめて agv/{id}/clearance で送る。
+// 1秒に5回。車体の外形からの距離 [cm]、物が見えない方向は null）。docs/agv_protocol.md の 2-7。
+// デモモードのときは、見た目を確かめるためのデモの値を動かす。
 import { useEffect, useState } from 'react';
-import type { Vehicle } from '../store/data';
+import { S, useClearance, useStore } from '../store/store';
 import { cx } from './uiUtils';
 
 const DANGER_CM = 40; // これより近いと「接近警告」（赤）
@@ -30,9 +31,22 @@ function arc(r: number, a0: number, a1: number) {
   return `M ${pt(a0)} A ${r} ${r} 0 0 1 ${pt(a1)}`;
 }
 
-// 1 秒ごとに描き直す（値が途絶えたことに気づけるように）
-function useNow() {
-  const [t, setT] = useState(() => Date.now());
+const STALE_MS = 2000; // これより古い値は使わない（LiDAR や通信が止まったとき）
+
+// 【仮】デモモードのときの値（1.4 秒ごとに変わる）
+function useDemoSonar(active: boolean): SonarData | null {
+  const random = () => Math.floor(Math.random() * 160) + 20;
+  const make = (): SonarData => ({
+    frontLeftCorner: random(),
+    frontLeftCenter: random(),
+    frontRightCenter: random(),
+    frontRightCorner: random(),
+    rearLeftCorner: random(),
+    rearLeftCenter: random(),
+    rearRightCenter: random(),
+    rearRightCorner: random(),
+  });
+  const [data, setData] = useState<SonarData>(make);
   useEffect(() => {
     const id = setInterval(() => setT(Date.now()), 1000);
     return () => clearInterval(id);
@@ -40,23 +54,49 @@ function useNow() {
   return t;
 }
 
-export function SonarView({ v }: { v: Vehicle }) {
-  const t = useNow();
-  const fresh = v.online && v.sensorAt > 0 && t - v.sensorAt < STALE_MS;
-  const cms = fresh && v.scan8 ? v.scan8.map(toCm) : null;
-  const us = fresh ? toCm(v.usFront) : null;
-  const all = [...(cms ?? []), us].filter((x): x is number => x != null);
-  const nearest = all.length ? Math.min(...all) : null;
-  const danger = nearest != null && nearest < DANGER_CM;
-  const nearestDir = cms && nearest != null ? (us === nearest ? '前（超音波）' : NAMES[cms.indexOf(nearest)]) : null;
+// 届いた距離 → 表示に使う形。物が見えない方向（null）は「遠い」（Infinity）として消灯する
+function toSonar(sectors: Record<string, number | null>): SonarData {
+  const get = (k: keyof SonarData) => {
+    const v = sectors[k];
+    return typeof v === 'number' ? v : Infinity;
+  };
+  return {
+    frontLeftCorner: get('frontLeftCorner'),
+    frontLeftCenter: get('frontLeftCenter'),
+    frontRightCenter: get('frontRightCenter'),
+    frontRightCorner: get('frontRightCorner'),
+    rearLeftCorner: get('rearLeftCorner'),
+    rearLeftCenter: get('rearLeftCenter'),
+    rearRightCenter: get('rearRightCenter'),
+    rearRightCorner: get('rearRightCorner'),
+  };
+}
 
-  const status = !v.online
+/** online = false（オフライン）のときと、LiDAR の値が届いていないときは消灯して理由を出す */
+export function SonarView({ vehicleId, online }: { vehicleId: string; online: boolean }) {
+  useStore(); // デモモードの切り替えに合わせて描き直す
+  const demo = useDemoSonar(S.demo && online);
+  const real = useClearance(vehicleId);
+  // 値が古くなったら消灯できるよう、0.5 秒ごとに描き直す
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const fresh = online && real != null && now - real.at < STALE_MS;
+  const sonar = S.demo ? demo : fresh ? toSonar(real.sectors) : null;
+  const near = sonar ? Math.min(...Object.values(sonar)) : Infinity;
+  const nearest = Number.isFinite(near) ? near : null;
+  const danger = nearest != null && nearest < DANGER_CM;
+  const status = !online
     ? 'データなし（オフライン）'
-    : !fresh
-      ? 'データなし（センサーの値が届いていません）'
-      : nearest == null
-        ? '近くに障害物はありません'
-        : `${danger ? '接近警告 ' : ''}いちばん近い所：${nearestDir ?? ''} ${nearest} cm`;
+    : !sonar
+      ? 'LiDAR のデータが届いていません'
+      : danger
+        ? `接近警告（いちばん近い所 ${nearest} cm）`
+        : nearest != null
+          ? `いちばん近い所 ${nearest} cm`
+          : '近くに物はありません';
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-1 p-3">
@@ -86,8 +126,7 @@ export function SonarView({ v }: { v: Vehicle }) {
         {/* 前の超音波（車体の前の点。近いほど色が変わる） */}
         <circle cx={150} cy={106} r={4} fill={us == null ? 'none' : colorOf(us)} className={cx(us == null && 'stroke-slate-400')} />
       </svg>
-      <div className={cx('text-xs font-semibold', !fresh ? 'text-slate-400' : danger ? 'text-red-600' : 'text-slate-500')}>{status}</div>
-      {fresh && <div className="text-[11px] text-slate-400">前の超音波：{us == null ? '—（範囲外）' : `${us} cm`}・円弧は LiDAR</div>}
+      <div className={cx('text-xs font-semibold', !sonar ? 'text-slate-400' : danger ? 'text-red-600' : 'text-slate-500')}>{status}</div>
     </div>
   );
 }

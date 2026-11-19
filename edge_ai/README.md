@@ -100,7 +100,7 @@ ros2 run agv_navigation send_task estop / clear / pause / resume / home
 
 ## 3. 実機: ラズパイ
 
-Raspberry Pi OS（64bit, Bookworm）のまま、ROS 2 は Docker で動かす（Ubuntu を入れ直さなくてよい）。
+Raspberry Pi OS（64bit。Bookworm でも Trixie でもよい）のまま、ROS 2 は Docker で動かす（Ubuntu を入れ直さなくてよい）。
 
 ### 準備（最初の1回）
 
@@ -175,6 +175,7 @@ teleop で走らせるときは PC1 の Nav2 を止めておく（両方から /
 | `/agv/command` | String(JSON) | mqtt_bridge → mission_manager（Web のコマンドそのまま） |
 | `/agv/state` | String(JSON) | mission_manager → mqtt_bridge → `agv/{id}/telemetry` |
 | `/agv/robot_info` | String(JSON) | serial_bridge → mqtt_bridge → `agv/{id}/telemetry`（電池など） |
+| `/agv/clearance` | String(JSON) | serial_bridge → mqtt_bridge → `agv/{id}/clearance`（LiDAR で見えている物の 8 方向の距離。Web のアラウンドビュー用） |
 | `/agv/task_status` | String(JSON) | mission_manager → `agv/{id}/task` |
 | `/agv/events` `/agv/mission_events` | String(JSON) | serial_bridge / mission_manager → `agv/{id}/emergency` |
 | `/agv/safety` | String(JSON) | serial_bridge（安全ガードの状態） |

@@ -1,7 +1,7 @@
 // src/services/socketService.ts
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
-import { VehicleUpdatePayload, LogPayload, SystemStatusPayload, TaskProgressPayload, VehiclePathPayload } from '../types';
+import { VehicleUpdatePayload, LogPayload, SystemStatusPayload, TaskProgressPayload, VehicleClearancePayload, VehiclePathPayload } from '../types';
 import { mqttService } from './mqttService';
 import { manualDriveService } from './manualDriveService';
 import { vehicleCommandService } from './vehicleCommandService';
@@ -244,6 +244,13 @@ class SocketService {
   broadcastTaskProgress(payload: TaskProgressPayload) {
     if (this.io) {
       this.io.emit('task:progress', payload);
+    }
+  }
+
+  // LiDAR で見えている物の 8 方向の距離（agv/{id}/clearance、1秒に5回）を知らせる。DB には保存しない
+  broadcastVehicleClearance(payload: VehicleClearancePayload) {
+    if (this.io) {
+      this.io.volatile.emit('vehicle:clearance', payload); // 回線が詰まっているときは捨ててよい（すぐ次が来る）
     }
   }
 
