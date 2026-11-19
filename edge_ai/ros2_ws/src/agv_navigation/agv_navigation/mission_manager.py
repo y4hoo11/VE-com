@@ -44,8 +44,8 @@ from agv_main.ros_utils import EVENTS, LATCHED, declare_tree, json_msg, parse_js
 
 DEFAULTS = {
     "agv_id": "AGV-01",
-    "map_id": "demo_map",
-    "waypoints_file": "",                     # 空なら agv_navigation/config/waypoints.yaml
+    "map_id": "demo_map",                     # 起動ファイルが map:= のファイル名で上書きする
+    "waypoints_file": "",                     # 空なら config/waypoints/<map_id>.yaml、無ければ config/waypoints.yaml
     "frames": {"map": "map", "base": "base_link"},
     "behavior_tree": "",                      # 空なら bt_navigator の既定（nav2_params.yaml）
     "tasks": {
@@ -92,9 +92,10 @@ class MissionManager(Node):
         super().__init__("mission_manager")
         self.cfg = declare_tree(self, DEFAULTS)
         self.id = str(os.environ.get("AGV_ID") or self.cfg["agv_id"])
-        wp_path = str(self.cfg["waypoints_file"]) or self._share_file("config", "waypoints.yaml")
+        self.map_id = str(self.cfg["map_id"])
+        wp_path = str(self.cfg["waypoints_file"]) or self._waypoints_file(self.map_id)
         self.waypoints = WaypointBook(wp_path)
-        self.get_logger().info(f"地点 {len(self.waypoints.items)} 件: {wp_path}")
+        self.get_logger().info(f"地図 {self.map_id} ・ 地点 {len(self.waypoints.items)} 件: {wp_path}")
         fr = self.cfg["frames"]
         self.map_frame, self.base_frame = str(fr["map"]), str(fr["base"])
 
@@ -142,6 +143,11 @@ class MissionManager(Node):
         self._initial_tries = 0
         self.create_timer(1.0, self._send_initial_pose_until_amcl)
         self.create_timer(0.1, self._tick)
+
+    def _waypoints_file(self, map_id: str) -> str:
+        """地図ごとの地点ファイル。その地図用が無ければ、共通の config/waypoints.yaml"""
+        per_map = self._share_file("config", "waypoints", f"{map_id}.yaml")
+        return per_map if os.path.isfile(per_map) else self._share_file("config", "waypoints.yaml")
 
     def _share_file(self, *parts) -> str:
         try:
@@ -251,6 +257,10 @@ class MissionManager(Node):
             data = json.loads(self.state_file.read_text(encoding="utf-8"))
             if time.time() - float(data["time"]) > max_age:
                 return None
+            # 別の地図で保存した位置は使わない（座標の意味が違うため）。地図名の無い古い保存は demo_map とみなす
+            if str(data.get("mapId", "demo_map")) != self.map_id:
+                self.get_logger().info(f"前回の位置は地図 {data.get('mapId', 'demo_map')} のものなので使いません")
+                return None
             return Pose2D(float(data["x"]), float(data["y"]), float(data["theta"]))
         except Exception:
             return None
@@ -262,7 +272,7 @@ class MissionManager(Node):
         try:
             self.state_file.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.state_file.with_suffix(".tmp")
-            tmp.write_text(json.dumps({**pose.to_dict(), "time": now}), encoding="utf-8")
+            tmp.write_text(json.dumps({**pose.to_dict(), "mapId": self.map_id, "time": now}), encoding="utf-8")
             tmp.replace(self.state_file)
         except Exception as e:
             self.get_logger().debug(f"位置の保存に失敗: {e}")
@@ -304,7 +314,7 @@ class MissionManager(Node):
         if now - self._t_state >= 1.0 / float(self.cfg["publish"]["state_hz"]):
             self._t_state = now
             payload = lg.summary()
-            payload.update({"mapId": str(self.cfg["map_id"]), "speed": round(self.speed, 2),
+            payload.update({"mapId": self.map_id, "speed": round(self.speed, 2),
                             "locQuality": round(self.quality, 2)})
             if pose is not None:
                 payload.update(pose.to_dict())

@@ -3,6 +3,7 @@
 
     ros2 run agv_navigation check_waypoints
     ros2 run agv_navigation check_waypoints --map maps/demo_map.yaml --waypoints config/waypoints.yaml --clearance 0.15
+    ros2 run agv_navigation check_waypoints --map maps/warehouse_a.yaml   # 地点は config/waypoints/warehouse_a.yaml（無ければ共通）
 """
 from __future__ import annotations
 
@@ -59,13 +60,17 @@ def reachable(free: np.ndarray, start: tuple[int, int]) -> np.ndarray:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--map", default=_share("maps", "demo_map.yaml"))
-    ap.add_argument("--waypoints", default=_share("config", "waypoints.yaml"))
+    ap.add_argument("--waypoints", default="", help="空なら config/waypoints/<地図名>.yaml、無ければ config/waypoints.yaml")
     ap.add_argument("--clearance", type=float, default=0.15,
                     help="壁からこれだけ離れていれば通れるとみなす [m]（車幅の半分 + 余裕）")
     a = ap.parse_args(argv)
 
+    if not a.waypoints:
+        per_map = _share("config", "waypoints", os.path.splitext(os.path.basename(a.map))[0] + ".yaml")
+        a.waypoints = per_map if os.path.isfile(per_map) else _share("config", "waypoints.yaml")
     m = SimMap(a.map)
     wps = WaypointBook(a.waypoints)
+    print(f"地点ファイル: {a.waypoints}")
     rad = max(1, int(math.ceil(a.clearance / m.res)))
     free = ~inflate(m.occ, rad)
     print(f"地図 {m.w}x{m.h}px ({m.w * m.res:.1f}m x {m.h * m.res:.1f}m), 地点 {len(wps.items)} 件, 通れる幅の目安 {2 * a.clearance:.2f}m")

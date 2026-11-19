@@ -68,7 +68,9 @@ def _setup(context, *args, **kwargs):
     bt_xml = os.path.join(share, "behavior_trees", "navigate_ackermann.xml")
     nav2_params = rewrite_nav2_params(params_src, map_yaml, bt_xml, use_sim_time)
 
-    overrides = {"use_sim_time": use_sim_time}
+    # 地図の名前は map:= のファイル名から決める（warehouse_a.yaml → warehouse_a）。
+    # Web はこの名前（telemetry の mapId）で表示する地図を選び、mission_manager は地図ごとの地点ファイルを選ぶ
+    overrides = {"use_sim_time": use_sim_time, "map_id": os.path.splitext(os.path.basename(map_yaml))[0]}
     if lc("agv_id"):
         overrides["agv_id"] = lc("agv_id")
     if lc("mqtt_host"):

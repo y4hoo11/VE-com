@@ -3,7 +3,8 @@
 // データはメモリにあるだけで、再読み込みやデモの切り替えで最初に戻る。
 // 実機で確認できるようになったら、このファイルと【仮】の付いた呼び出しを消す。
 import { AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
-import { isFree, needApprovals, pathLen, planRoute, SETTING_ITEMS, settingItem, valueError, wpByName, type Level, type Phase, type Pt, type ReqStatus, type TStatus, type VStatus } from '../store/data';
+import { needApprovals, pathLen, SETTING_ITEMS, settingItem, valueError, type Level, type Phase, type Pt, type ReqStatus, type TStatus, type VStatus } from '../store/data';
+import { DEFAULT_MAP_ID, mapApi } from '../store/map';
 
 const TICK_MS = 200;
 const SPEED = 0.8; // m/s（実機より速め。見ていて分かるように）
@@ -12,9 +13,14 @@ const WAIT_SEC = 5; // 荷積み・荷降ろしにかかる秒数
 const DRAIN_PER_SEC = 0.1; // 走行中に減るバッテリー（%）
 const CHARGE_PER_SEC = 0.5; // 充電中に増えるバッテリー（%）
 
+// デモの車両は、表示中の地図に関係なく demo_map の上で動かす（4号機だけ warehouse_b にいることにして、複数の地図の表示を試せるようにする）
+const DEMO_MAP = mapApi(DEFAULT_MAP_ID);
+const { isFree, planRoute, wpByName } = DEMO_MAP;
+
 type DemoVehicle = {
   id: string;
   name: string;
+  mapId: string;
   status: VStatus;
   prevStatus: VStatus;
   x: number;
@@ -96,9 +102,10 @@ const wpPt = (name: string): Pt => {
   return w ? { x: w.x, y: w.y } : { x: 1.5, y: 5 };
 };
 
-function makeVehicle(id: string, name: string, at: string, status: VStatus, battery: number): DemoVehicle {
-  const p = wpPt(at);
-  return { id, name, status, prevStatus: status, x: p.x, y: p.y, theta: 0, battery, speed: 0, paused: false, route: [], routeTotal: 1, goal: null, mode: 'IDLE', phase: null, wait: 0, taskId: null, lastHb: Date.now(), manual: null };
+function makeVehicle(id: string, name: string, at: string, status: VStatus, battery: number, mapId = DEFAULT_MAP_ID): DemoVehicle {
+  const w = mapApi(mapId).wpByName(at);
+  const p = mapId === DEFAULT_MAP_ID || !w ? wpPt(at) : { x: w.x, y: w.y };
+  return { id, name, mapId, status, prevStatus: status, x: p.x, y: p.y, theta: 0, battery, speed: 0, paused: false, route: [], routeTotal: 1, goal: null, mode: 'IDLE', phase: null, wait: 0, taskId: null, lastHb: Date.now(), manual: null };
 }
 function makeTask(title: string, start: string, target: string, priority: number, createdAt = Date.now()): DemoTask {
   return {
@@ -142,7 +149,7 @@ export function resetDemo() {
     makeVehicle('AGV-91', 'デモ1号機', 'Dock-A', 'RUNNING', 84),
     makeVehicle('AGV-92', 'デモ2号機', 'Home', 'CHARGING', 62),
     makeVehicle('AGV-93', 'デモ3号機', 'Station-2', 'IDLE', 15),
-    makeVehicle('AGV-94', 'デモ4号機', 'Station-3', 'OFFLINE', 48),
+    makeVehicle('AGV-94', 'デモ4号機', 'Home', 'OFFLINE', 48, 'warehouse_b'),
   ];
   const done = makeTask('棚A13へ補充（完了済み）', 'Dock-B', 'A13', 1, t - 3600_000);
   done.assignedVehicleId = 'AGV-93';
@@ -299,6 +306,7 @@ function sendUpdate(v: DemoVehicle) {
   fire('vehicle:update', {
     id: v.id,
     name: v.name,
+    currentMapId: v.mapId,
     status: v.status,
     batteryLevel: Math.round(v.battery * 10) / 10,
     currentX: v.x,
@@ -568,7 +576,7 @@ const vehicleJson = (v: DemoVehicle) => ({
   currentX: v.x,
   currentY: v.y,
   currentTheta: v.theta,
-  currentMapId: 'demo',
+  currentMapId: v.mapId,
   lastHeartbeat: iso(v.lastHb),
 });
 
