@@ -1,9 +1,11 @@
 // 物理センサー（アラウンドビュー）：車体のまわり 8 方向の距離を、近いほど内側まで点く円弧で表す。
 // もとは緊急制御画面（otyazuke さん作）にあった表示を、車両詳細ページ用の部品にしたもの。
 //
-// 【仮】実機のセンサーの値はまだ Web に届いていないので、いまは見た目を確かめるためのデモの値を動かしている。
-// 実データが届くようになったら、useDemoSonar を telemetry の値に置き換える。
+// 距離は LiDAR で見えている物から作る（ラズパイの serial_bridge が 8 方向にまとめて agv/{id}/clearance で送る。
+// 1秒に5回。車体の外形からの距離 [cm]、物が見えない方向は null）。docs/agv_protocol.md の 2-7。
+// デモモードのときは、見た目を確かめるためのデモの値を動かす。
 import { useEffect, useState } from 'react';
+import { S, useClearance, useStore } from '../store/store';
 import { cx } from './uiUtils';
 
 // 8 方向の距離 [cm]
@@ -46,7 +48,9 @@ function arc(r: number, a0: number, a1: number) {
   return `M ${pt(a0)} A ${r} ${r} 0 0 1 ${pt(a1)}`;
 }
 
-// 【仮】デモの値（1.4 秒ごとに変わる）
+const STALE_MS = 2000; // これより古い値は使わない（LiDAR や通信が止まったとき）
+
+// 【仮】デモモードのときの値（1.4 秒ごとに変わる）
 function useDemoSonar(active: boolean): SonarData | null {
   const random = () => Math.floor(Math.random() * 160) + 20;
   const make = (): SonarData => ({
@@ -69,11 +73,49 @@ function useDemoSonar(active: boolean): SonarData | null {
   return active ? data : null;
 }
 
-/** online = false（オフライン）のときは消灯して「データなし」と出す */
-export function SonarView({ online }: { online: boolean }) {
-  const sonar = useDemoSonar(online);
-  const nearest = sonar ? Math.min(...Object.values(sonar)) : null;
+// 届いた距離 → 表示に使う形。物が見えない方向（null）は「遠い」（Infinity）として消灯する
+function toSonar(sectors: Record<string, number | null>): SonarData {
+  const get = (k: keyof SonarData) => {
+    const v = sectors[k];
+    return typeof v === 'number' ? v : Infinity;
+  };
+  return {
+    frontLeftCorner: get('frontLeftCorner'),
+    frontLeftCenter: get('frontLeftCenter'),
+    frontRightCenter: get('frontRightCenter'),
+    frontRightCorner: get('frontRightCorner'),
+    rearLeftCorner: get('rearLeftCorner'),
+    rearLeftCenter: get('rearLeftCenter'),
+    rearRightCenter: get('rearRightCenter'),
+    rearRightCorner: get('rearRightCorner'),
+  };
+}
+
+/** online = false（オフライン）のときと、LiDAR の値が届いていないときは消灯して理由を出す */
+export function SonarView({ vehicleId, online }: { vehicleId: string; online: boolean }) {
+  useStore(); // デモモードの切り替えに合わせて描き直す
+  const demo = useDemoSonar(S.demo && online);
+  const real = useClearance(vehicleId);
+  // 値が古くなったら消灯できるよう、0.5 秒ごとに描き直す
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const fresh = online && real != null && now - real.at < STALE_MS;
+  const sonar = S.demo ? demo : fresh ? toSonar(real.sectors) : null;
+  const near = sonar ? Math.min(...Object.values(sonar)) : Infinity;
+  const nearest = Number.isFinite(near) ? near : null;
   const danger = nearest != null && nearest < DANGER_CM;
+  const status = !online
+    ? 'データなし（オフライン）'
+    : !sonar
+      ? 'LiDAR のデータが届いていません'
+      : danger
+        ? `接近警告（いちばん近い所 ${nearest} cm）`
+        : nearest != null
+          ? `いちばん近い所 ${nearest} cm`
+          : '近くに物はありません';
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-1 p-3">
@@ -102,9 +144,7 @@ export function SonarView({ online }: { online: boolean }) {
           前
         </text>
       </svg>
-      <div className={cx('text-xs font-semibold', !sonar ? 'text-slate-400' : danger ? 'text-red-600' : 'text-slate-500')}>
-        {!sonar ? 'データなし（オフライン）' : danger ? `接近警告（いちばん近い所 ${nearest} cm）` : `いちばん近い所 ${nearest} cm`}
-      </div>
+      <div className={cx('text-xs font-semibold', !sonar ? 'text-slate-400' : danger ? 'text-red-600' : 'text-slate-500')}>{status}</div>
     </div>
   );
 }

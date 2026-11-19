@@ -56,13 +56,13 @@ export function VehicleDetail() {
           <Card
             title={
               <>
-                物理センサー<span className="text-xs font-normal text-slate-500">アラウンドビュー</span> <Tag tone="amber">デモ表示</Tag>
+                物理センサー<span className="text-xs font-normal text-slate-500">アラウンドビュー（LiDAR）</span> {s.demo && <Tag tone="amber">デモ表示</Tag>}
               </>
             }
             bodyClass="min-h-0 flex-1"
             className="flex flex-col"
           >
-            <SonarView online={v.online} />
+            <SonarView vehicleId={v.id} online={v.online} />
           </Card>
         </div>
 

@@ -175,6 +175,7 @@ teleop で走らせるときは PC1 の Nav2 を止めておく（両方から /
 | `/agv/command` | String(JSON) | mqtt_bridge → mission_manager（Web のコマンドそのまま） |
 | `/agv/state` | String(JSON) | mission_manager → mqtt_bridge → `agv/{id}/telemetry` |
 | `/agv/robot_info` | String(JSON) | serial_bridge → mqtt_bridge → `agv/{id}/telemetry`（電池など） |
+| `/agv/clearance` | String(JSON) | serial_bridge → mqtt_bridge → `agv/{id}/clearance`（LiDAR で見えている物の 8 方向の距離。Web のアラウンドビュー用） |
 | `/agv/task_status` | String(JSON) | mission_manager → `agv/{id}/task` |
 | `/agv/events` `/agv/mission_events` | String(JSON) | serial_bridge / mission_manager → `agv/{id}/emergency` |
 | `/agv/safety` | String(JSON) | serial_bridge（安全ガードの状態） |

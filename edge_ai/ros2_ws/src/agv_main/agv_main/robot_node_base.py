@@ -12,6 +12,7 @@
   agv/safety       std_msgs/String(JSON) 安全ガードの状態（変化時 + 1Hz）
   agv/events       std_msgs/String(JSON) Web に知らせる異常（mqtt_bridge が agv/{id}/emergency へ）
   agv/robot_info   std_msgs/String(JSON) 電池・温度など 1Hz（mqtt_bridge が agv/{id}/telemetry へ）
+  agv/clearance    std_msgs/String(JSON) LiDAR で見えている物の 8 方向の距離 5Hz（mqtt_bridge が agv/{id}/clearance へ）
 サービス:
   zero_yaw         std_srvs/Trigger      IMU のヨー角を 0 に（止まっているときに）
 静的 TF（robot.yaml の laser / camera_mount から）:
@@ -79,6 +80,7 @@ class RobotBridgeBase(Node):
         self.pub_safety = self.create_publisher(String, "agv/safety", LATCHED)
         self.pub_events = self.create_publisher(String, "agv/events", EVENTS)
         self.pub_info = self.create_publisher(String, "agv/robot_info", 5)
+        self.pub_clearance = self.create_publisher(String, "agv/clearance", 5)
         self.tf_pub = TransformBroadcaster(self) if bool(self.cfg["publish_tf"]) else None
         if bool(self.cfg["publish_static_tf"]):
             self._publish_static_tf()
@@ -92,6 +94,8 @@ class RobotBridgeBase(Node):
         rates = self.cfg["rates"]
         self.create_timer(1.0 / float(rates["control_hz"]), self._control_tick)
         self.create_timer(1.0 / float(rates["info_hz"]), self._info_tick)
+        if float(rates.get("clearance_hz", 0.0)) > 0:
+            self.create_timer(1.0 / float(rates["clearance_hz"]), self._clearance_tick)
 
         self.esp.start()
         self.get_logger().info(f"{node_name} 起動: {self.cfg['agv_id']} ({self.cfg['name']})")
@@ -322,6 +326,13 @@ class RobotBridgeBase(Node):
         if len(ts) < 2 or time.time() - ts[-1] > 1.0:
             return 0.0
         return round((len(ts) - 1) / max(1e-3, ts[-1] - ts[0]), 1)
+
+    def _clearance_tick(self) -> None:
+        """LiDAR で見えている物の距離を 8 方向にまとめて出す（mqtt_bridge が agv/{id}/clearance へ）。
+        LiDAR が止まっているときは出さない（Web 側が「データなし」にする）"""
+        c = self.core.clearance(time.time())
+        if c is not None:
+            self.pub_clearance.publish(json_msg(c))
 
     def _info_tick(self) -> None:
         info = {"name": str(self.cfg["name"]), "esp32": bool(self.esp.online), "lidarHz": self.lidar_hz()}

@@ -86,6 +86,26 @@ export interface VehiclePathPayload {
   goal: { x: number; y: number } | null;
 }
 
+// LiDAR で見えている物の距離（ラズパイの agv/{id}/clearance）。車体のまわり 8 方向、車体の外形から [cm]
+// 物が見えない方向は null。車両詳細ページのアラウンドビューに出す
+export const CLEARANCE_KEYS = [
+  'frontLeftCorner',
+  'frontLeftCenter',
+  'frontRightCenter',
+  'frontRightCorner',
+  'rearLeftCorner',
+  'rearLeftCenter',
+  'rearRightCenter',
+  'rearRightCorner',
+] as const;
+export type ClearanceKey = (typeof CLEARANCE_KEYS)[number];
+
+export interface VehicleClearancePayload {
+  id: string;
+  sectors: Record<ClearanceKey, number | null>;
+  nearest: number | null;
+}
+
 // サーバーの接続状態（画面のヘッダー・お知らせ帯に出す）
 export interface SystemStatusPayload {
   mqtt: boolean;

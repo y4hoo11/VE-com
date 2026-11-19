@@ -245,6 +245,26 @@ export interface PlannedPath {
 }
 
 // =====================================================================
+// 7b. 車両 → Web: agv/{id}/clearance （表示用、1 秒に 5 回）
+// =====================================================================
+
+/** LiDAR で見えている物までの距離。車体のまわり 8 方向、車体の外形から [cm]。物が見えない方向は null */
+export type ClearanceSector =
+  | 'frontLeftCorner'
+  | 'frontLeftCenter'
+  | 'frontRightCenter'
+  | 'frontRightCorner'
+  | 'rearLeftCorner'
+  | 'rearLeftCenter'
+  | 'rearRightCenter'
+  | 'rearRightCorner';
+
+export interface Clearance {
+  sectors: Record<ClearanceSector, number | null>;
+  nearest: number | null;    // 8 方向でいちばん近い距離（全部 null なら null）
+}
+
+// =====================================================================
 // 8. 車両 → Web: agv/{id}/online （retain。切れると遺言で false）
 // =====================================================================
 
@@ -263,5 +283,6 @@ export const AgvTopics = {
   emergency: (id: string) => `agv/${id}/emergency`,
   path: (id: string) => `agv/${id}/path`,
   online: (id: string) => `agv/${id}/online`,
+  clearance: (id: string) => `agv/${id}/clearance`,
   broadcastStop: 'agv/broadcast/stop',
 } as const;
