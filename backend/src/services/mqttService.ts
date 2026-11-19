@@ -45,6 +45,10 @@ function pickTelemetryExtra(m: Record<string, unknown>): VehicleTelemetryExtra |
   }
   if (typeof m.esp32 === 'boolean') out.esp32 = m.esp32;
   if (typeof m.paused === 'boolean') out.paused = m.paused;
+  // 障害物までの距離（8 方向の LiDAR と、前の超音波）。数でないもの（未接続・点なし）は null にする
+  const dist = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+  if (Array.isArray(m.scan8) && m.scan8.length === 8) out.scan8 = m.scan8.map(dist);
+  if ('usFront' in m) out.usFront = dist(m.usFront);
   return Object.keys(out).length ? (out as VehicleTelemetryExtra) : undefined;
 }
 

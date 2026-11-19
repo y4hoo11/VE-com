@@ -333,6 +333,9 @@ class FakeVehicle {
       piTemp: round(48 + Math.sin(Date.now() / 30000) * 2),
       esp32: true,
       lidarHz: 5.5,
+      // 障害物までの距離 [m]（本物は LiDAR を 8 方向に分けたもの・前の超音波）。偽物なので、ゆっくり変わる値にする
+      scan8: Array.from({ length: 8 }, (_, i) => (i === 3 ? null : round(0.3 + 1.2 * (1 + Math.sin(Date.now() / 4000 + i)) / 2))),
+      usFront: round(0.3 + 1.2 * (1 + Math.sin(Date.now() / 4000)) / 2),
     });
   }
 

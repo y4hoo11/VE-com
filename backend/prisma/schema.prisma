@@ -73,6 +73,9 @@ model Vehicle {
   currentTheta  Float?        @map("current_theta")
   currentMapId  String?       @map("current_map_id")
   lastHeartbeat DateTime?     @map("last_heartbeat")
+  // カメラ映像の URL（ブラウザで直接開く MJPEG 配信）。無ければ空欄
+  cameraUrl     String?       @map("camera_url") // Pi カメラ（例: http://agv-pi.local:8090/stream.mjpg）
+  camera2Url    String?       @map("camera2_url") // USB カメラ（例: http://agv-pi.local:8091/）
   createdAt     DateTime      @default(now()) @map("created_at")
   updatedAt     DateTime      @updatedAt @map("updated_at")
 

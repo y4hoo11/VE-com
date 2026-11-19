@@ -1,4 +1,4 @@
-// 物理センサー（アラウンドビュー）：車体のまわり 8 方向の距離を、近いほど内側まで点く円弧で表す。
+// 物理センサー（アラウンドビュー）：車体のまわり 8 方向の障害物までの距離を、近いほど内側まで点く円弧で表す。
 // もとは緊急制御画面（otyazuke さん作）にあった表示を、車両詳細ページ用の部品にしたもの。
 //
 // 距離は LiDAR で見えている物から作る（ラズパイの serial_bridge が 8 方向にまとめて agv/{id}/clearance で送る。
@@ -8,36 +8,19 @@ import { useEffect, useState } from 'react';
 import { S, useClearance, useStore } from '../store/store';
 import { cx } from './uiUtils';
 
-// 8 方向の距離 [cm]
-export type SonarData = {
-  frontLeftCorner: number;
-  frontLeftCenter: number;
-  frontRightCenter: number;
-  frontRightCorner: number;
-  rearLeftCorner: number;
-  rearLeftCenter: number;
-  rearRightCenter: number;
-  rearRightCorner: number;
-};
-
 const DANGER_CM = 40; // これより近いと「接近警告」（赤）
 const CAUTION_CM = 70; // これより近いと注意（黄）
+const STALE_MS = 3000; // これより長く値が届かなければ「データなし」
 
-// 各方向の円弧を描く角度（真上 = 前が 0°、時計回り）
-const SECTORS: [keyof SonarData, number, number][] = [
-  ['frontLeftCorner', -65, -35],
-  ['frontLeftCenter', -30, -5],
-  ['frontRightCenter', 5, 30],
-  ['frontRightCorner', 35, 65],
-  ['rearRightCorner', 115, 145],
-  ['rearRightCenter', 150, 175],
-  ['rearLeftCenter', -175, -150],
-  ['rearLeftCorner', -145, -115],
-];
+// scan8 の並び [前, 左前, 左, 左後, 後, 右後, 右, 右前] と、画面での向き（真上 = 前が 0°、時計回り）
+const NAMES = ['前', '左前', '左', '左後', '後', '右後', '右', '右前'];
+const SECTORS = NAMES.map((_, i) => -45 * i);
+const HALF = 18; // 1 方向の円弧の半分の幅 [度]
 
-// 距離 → 点ける円弧の本数（0 = 消灯、4 = いちばん近い）
-const levelOf = (cm: number) => (cm < DANGER_CM ? 4 : cm < CAUTION_CM ? 3 : cm < 100 ? 2 : cm < 140 ? 1 : 0);
+// 距離 → 点ける円弧の本数（0 = 消灯、4 = いちばん近い）。null（その方向に何もない）は消灯
+const levelOf = (cm: number | null) => (cm == null ? 0 : cm < DANGER_CM ? 4 : cm < CAUTION_CM ? 3 : cm < 100 ? 2 : cm < 140 ? 1 : 0);
 const colorOf = (cm: number) => (cm < DANGER_CM ? '#ef4444' : cm < CAUTION_CM ? '#f59e0b' : '#38bdf8');
+const toCm = (m: number | null | undefined) => (m == null ? null : Math.round(m * 100));
 
 // 中心 (150,150)・半径 r で、角度 a0〜a1 の円弧
 function arc(r: number, a0: number, a1: number) {
@@ -65,12 +48,10 @@ function useDemoSonar(active: boolean): SonarData | null {
   });
   const [data, setData] = useState<SonarData>(make);
   useEffect(() => {
-    if (!active) return;
-    const t = setInterval(() => setData(make()), 1400);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
-  return active ? data : null;
+    const id = setInterval(() => setT(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return t;
 }
 
 // 届いた距離 → 表示に使う形。物が見えない方向（null）は「遠い」（Infinity）として消灯する
@@ -122,16 +103,18 @@ export function SonarView({ vehicleId, online }: { vehicleId: string; online: bo
       <svg viewBox="30 30 240 240" className="w-full max-w-[280px] flex-1" role="img" aria-label="車体のまわりのセンサー表示">
         {/* 消灯している円弧（ガイド） */}
         <g fill="none" strokeWidth={6} strokeLinecap="round" className="stroke-slate-200 dark:stroke-slate-700">
-          {SECTORS.map(([key, a0, a1]) => [0, 1, 2, 3].map((i) => <path key={key + i} d={arc(65 + i * 10, a0, a1)} />))}
+          {SECTORS.map((a, k) => [0, 1, 2, 3].map((i) => <path key={`${k}-${i}`} d={arc(65 + i * 10, a - HALF, a + HALF)} />))}
         </g>
         {/* 点いている円弧（近いほど内側まで点く） */}
-        {sonar && (
+        {cms && (
           <g fill="none" strokeWidth={6} strokeLinecap="round">
-            {SECTORS.map(([key, a0, a1]) => {
-              const cm = sonar[key];
+            {SECTORS.map((a, k) => {
+              const cm = cms[k];
               const level = levelOf(cm);
               return [0, 1, 2, 3].map((i) =>
-                level >= 4 - i ? <path key={key + i} d={arc(65 + i * 10, a0, a1)} stroke={colorOf(cm)} className={cx(cm < DANGER_CM && i === 0 && 'animate-pulse')} /> : null,
+                cm != null && level >= 4 - i ? (
+                  <path key={`${k}-${i}`} d={arc(65 + i * 10, a - HALF, a + HALF)} stroke={colorOf(cm)} className={cx(cm < DANGER_CM && i === 0 && 'animate-pulse')} />
+                ) : null,
               );
             })}
           </g>
@@ -140,9 +123,8 @@ export function SonarView({ vehicleId, online }: { vehicleId: string; online: bo
         <rect x={128} y={110} width={44} height={80} rx={10} className={cx('stroke-2', danger ? 'fill-red-100 stroke-red-500 dark:fill-red-950' : 'fill-slate-100 stroke-slate-400 dark:fill-slate-800 dark:stroke-slate-500')} />
         <rect x={134} y={120} width={32} height={12} rx={3} className="fill-slate-400 dark:fill-slate-500" />
         <rect x={134} y={170} width={32} height={9} rx={3} className="fill-slate-300 dark:fill-slate-600" />
-        <text x={150} y={104} textAnchor="middle" fontSize={11} className="fill-slate-400">
-          前
-        </text>
+        {/* 前の超音波（車体の前の点。近いほど色が変わる） */}
+        <circle cx={150} cy={106} r={4} fill={us == null ? 'none' : colorOf(us)} className={cx(us == null && 'stroke-slate-400')} />
       </svg>
       <div className={cx('text-xs font-semibold', !sonar ? 'text-slate-400' : danger ? 'text-red-600' : 'text-slate-500')}>{status}</div>
     </div>

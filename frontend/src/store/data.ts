@@ -46,6 +46,11 @@ export interface Vehicle {
   esp32: boolean | null;
   lidarHz: number | null;
   vbat: number | null;
+  // 障害物までの距離 [m]。scan8 は LiDAR の 8 方向 [前, 左前, 左, 左後, 後, 右後, 右, 右前]（null = その方向に点なし）、
+  // usFront は前の超音波（null = 未接続・範囲外）。sensorAt は最後に届いた時刻（古ければ「データなし」にする）
+  scan8: (number | null)[] | null;
+  usFront: number | null;
+  sensorAt: number;
   online: boolean;
   paused: boolean;
   wait: number; // 荷積み・荷降ろしの残り秒
@@ -59,7 +64,8 @@ export interface Vehicle {
   note: string | null; // rosMode の補足（HOLD の理由など。telemetry の note）
   err: VErr | null;
   prevStatus: VStatus;
-  camera: string;
+  camera: string; // Pi カメラの映像 URL（空 = 未登録）
+  camera2: string; // USB カメラの映像 URL（空 = 未登録）
   lastHb: number;
 }
 
@@ -116,7 +122,7 @@ export interface User {
 // ---------------------------------------------------------------
 // 地図・地点は map.ts（ROS 側の地図と waypoints.yaml を読み込む）。ここからも使えるように出しておく
 // ---------------------------------------------------------------
-export { isFree, planRoute, WAYPOINTS, wpByName } from './map';
+export { isFree, planRoute, scan8At, WAYPOINTS, wpByName } from './map';
 
 export const pathLen = (pts: Pt[]) =>
   pts.slice(1).reduce((s, b, i) => s + Math.hypot(b.x - pts[i].x, b.y - pts[i].y), 0);

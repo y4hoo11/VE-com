@@ -286,23 +286,58 @@ function Key({ k, on }: { k: string; on?: boolean }) {
   );
 }
 
-// カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL を保存する仕組みは未対応
+// カメラ映像（ラズパイが配信する MJPEG を、ブラウザで直接開く）。URL は 設定 → 車両 で登録する（DB の camera_url・camera2_url）
+// Pi カメラと USB カメラは、右上のボタンで切り替える
+const CAMS = [
+  { key: 'camera', label: 'Pi カメラ' },
+  { key: 'camera2', label: 'USB カメラ' },
+] as const;
+
 function Camera({ v }: { v: Vehicle }) {
-  const msg = !v.camera
-    ? 'カメラ映像が登録されていません'
+  const [pick, setPick] = useState<'camera' | 'camera2'>('camera');
+  const [failed, setFailed] = useState(''); // 読み込めなかった URL（URL が変われば、もう一度試す）
+  const cams = CAMS.filter((c) => v[c.key]);
+  const cur = cams.find((c) => c.key === pick) ?? cams[0];
+  const url = cur ? v[cur.key] : '';
+
+  const msg = !url
+    ? 'カメラ映像が登録されていません（設定 → 車両 で URL を登録できます）'
     : !v.online
       ? '映像を受信できません（車両がオフライン）'
-      : null;
-  if (msg) {
-    return <div className="flex h-full items-center justify-center rounded-b-xl bg-slate-900 px-6 text-center text-slate-400">{msg}</div>;
-  }
+      : failed === url
+        ? '映像を読み込めませんでした（URL と、ラズパイの配信が動いているかを確認してください）'
+        : null;
+
   return (
     <div className="relative h-full overflow-hidden rounded-b-xl bg-slate-900">
-      <img src={v.camera} alt={`${v.name} のカメラ映像`} className="h-full w-full object-contain" />
-      <div className="absolute top-2 left-3 flex items-center gap-2 text-xs font-bold text-white">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> LIVE ・ {v.name}
-      </div>
-      <div className="absolute bottom-2 left-3 font-mono text-xs text-white/60">{v.camera}</div>
+      {msg ? (
+        <div className="flex h-full items-center justify-center px-6 text-center text-slate-400">{msg}</div>
+      ) : (
+        <>
+          <img key={url} src={url} alt={`${v.name} の${cur?.label}の映像`} className="h-full w-full object-contain" onError={() => setFailed(url)} />
+          <div className="absolute top-2 left-3 flex items-center gap-2 text-xs font-bold text-white">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> LIVE ・ {v.name} ・ {cur?.label}
+          </div>
+        </>
+      )}
+      {cams.length > 1 && (
+        <div className="absolute top-2 right-2 flex rounded-lg bg-black/50 p-0.5 text-xs">
+          {cams.map((c) => (
+            <button
+              type="button"
+              key={c.key}
+              onClick={() => {
+                setPick(c.key);
+                setFailed('');
+              }}
+              className={cx('rounded-md px-2.5 py-1', c.key === cur?.key ? 'bg-white font-bold text-slate-900' : 'text-white/80 hover:text-white')}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {url && <div className="absolute bottom-2 left-3 font-mono text-xs text-white/60">{url}</div>}
     </div>
   );
 }
