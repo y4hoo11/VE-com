@@ -2,6 +2,7 @@
 // 偽の PC1（ROS 側）。実機がなくても Web をつないで確かめるための道具。
 // docs/agv_protocol.md のとおりに MQTT で話す：
 //   送る … agv/{id}/telemetry（2Hz と 1Hz）、agv/{id}/task、agv/{id}/path、agv/{id}/online、agv/{id}/emergency
+//   ※ 障害物までの距離（scan8・usFront）は、本物は agv/{id}/clearance（5Hz）で送るが、偽物は 1Hz の telemetry に入れている
 //   受ける … agv/{id}/command（TASK_ASSIGN・PAUSE・RESUME・CANCEL_TASK・CONFIRM・GOTO・RETURN_HOME・SET_POSE・
 //            EMERGENCY_STOP・CLEAR_EMERGENCY・MANUAL_DRIVE）と agv/broadcast/stop
 //
@@ -330,6 +331,9 @@ class FakeVehicle {
       piTemp: round(48 + Math.sin(Date.now() / 30000) * 2),
       esp32: true,
       lidarHz: 5.5,
+      // 障害物までの距離 [m]（本物は LiDAR を 8 方向に分けたもの・前の超音波）。偽物なので、ゆっくり変わる値にする
+      scan8: Array.from({ length: 8 }, (_, i) => (i === 3 ? null : round(0.3 + 1.2 * (1 + Math.sin(Date.now() / 4000 + i)) / 2))),
+      usFront: round(0.3 + 1.2 * (1 + Math.sin(Date.now() / 4000)) / 2),
     });
   }
 

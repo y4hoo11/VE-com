@@ -17,7 +17,7 @@
   agv/mission_events String(JSON)  LOCALIZATION_LOST / BLOCKED（→ agv/{id}/emergency）
   initialpose       PoseWithCovarianceStamped  起動時・SET_POSE・地図の切り替えで AMCL に現在地を教える
   cmd_vel           Twist          手動操縦（MANUAL_DRIVE）のときだけ。タスクが無いとき = Nav2 が出していないとき
-  agv/map_status    String(JSON)   地図の切り替えの結果（→ agv/{id}/map。docs/agv_protocol.md 2-8）
+  agv/map_status    String(JSON)   地図の切り替えの結果（→ agv/{id}/map。docs/agv_protocol.md 2-9）
   sim/set_map       String(JSON)   シミュレーターの世界の地図も切り替える（sim_robot。実機では誰も受けない）
 アクション / サービス:
   navigate_to_pose（Nav2）
@@ -322,7 +322,7 @@ class MissionManager(Node):
                 self._lost_reported = False
 
     # ------------------------------------------------------------------
-    #  地図の切り替え（SET_MAP。docs/agv_protocol.md 2-7, 2-8）
+    #  地図の切り替え（SET_MAP。docs/agv_protocol.md 2-8, 2-9）
     # ------------------------------------------------------------------
     def _map_status(self, state: str, map_id: str, reason: str) -> None:
         d = {"state": state, "mapId": map_id, "from": self.map_id, "reason": reason}

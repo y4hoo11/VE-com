@@ -76,6 +76,7 @@
     rates:
       control_hz: 20.0             # ESP32 へ指令を送る周期
       info_hz: 1.0
+      clearance_hz: 5.0            # Web のアラウンドビューに出す、LiDAR の 8 方向の距離（0 = 出さない）
 
     # ---- 自前 LiDAR ドライバ（lidar_driver:=builtin のときだけ使う）----
     lidar:

@@ -2,14 +2,14 @@ import { mqttClient } from '../config/mqtt';
 import { socketService } from './socketService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
-import type { VehicleTelemetryExtra } from '../types';
+import type { VehicleClearancePayload, VehicleTelemetryExtra } from '../types';
 import { taskProgressService } from './taskProgressService';
 import { emergencyState } from './emergencyState';
 
-// 受信するトピック（docs/agv_protocol.md 2-2〜2-6, 2-8）
-const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online', 'agv/+/map'];
+// 受信するトピック（docs/agv_protocol.md 2-2〜2-7, 2-9）
+const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online', 'agv/+/clearance', 'agv/+/map'];
 
-// 使う地図（全車両共通。docs/agv_protocol.md 2-7）。設定「使用する地図の切り替え」の DB のキーと、まだ保存されていないときの地図
+// 使う地図（全車両共通。docs/agv_protocol.md 2-8）。設定「使用する地図の切り替え」の DB のキーと、まだ保存されていないときの地図
 export const MAP_TOPIC = 'agv/config/map';
 export const MAP_SETTING_KEY = 'map.active';
 export const DEFAULT_MAP_ID = 'demo_map';
@@ -36,6 +36,16 @@ function readPath(m: Record<string, unknown>) {
   return { points, goal };
 }
 
+// agv/{id}/clearance（scan8・usFront [m]）を画面の形にする。数でない値は null（点なし・未接続）にする
+// scan8 が 8 個でなければ捨てる（null を返す）
+function readClearance(m: Record<string, unknown>): Omit<VehicleClearancePayload, 'id'> | null {
+  const dist = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+  if (!Array.isArray(m.scan8) || m.scan8.length !== 8) return null;
+  const out: Omit<VehicleClearancePayload, 'id'> = { scan8: m.scan8.map(dist) };
+  if ('usFront' in m) out.usFront = dist(m.usFront);
+  return out;
+}
+
 // telemetry の追加項目のうち、画面にそのまま流すもの（型が合うものだけ通す）
 const NUM_KEYS = ['speed', 'locQuality', 'piTemp', 'lidarHz', 'vbat'] as const;
 const STR_KEYS = ['phase', 'goal', 'taskId', 'mode', 'note'] as const;
@@ -51,6 +61,10 @@ function pickTelemetryExtra(m: Record<string, unknown>): VehicleTelemetryExtra |
   }
   if (typeof m.esp32 === 'boolean') out.esp32 = m.esp32;
   if (typeof m.paused === 'boolean') out.paused = m.paused;
+  // 障害物までの距離（8 方向の LiDAR と、前の超音波）。数でないもの（未接続・点なし）は null にする
+  const dist = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+  if (Array.isArray(m.scan8) && m.scan8.length === 8) out.scan8 = m.scan8.map(dist);
+  if ('usFront' in m) out.usFront = dist(m.usFront);
   return Object.keys(out).length ? (out as VehicleTelemetryExtra) : undefined;
 }
 
@@ -203,6 +217,10 @@ class MqttService {
         } else if (topic.endsWith('/task')) {
           // タスクの進捗（docs/agv_protocol.md 2-4）
           await taskProgressService.handle(agvId, message);
+        } else if (topic.endsWith('/clearance')) {
+          // LiDAR で見えている物の 8 方向の距離（2-7）。DB には保存せず、画面に流すだけ
+          const c = readClearance(message);
+          if (c) socketService.broadcastVehicleClearance({ id: agvId, ...c });
         } else if (topic.endsWith('/path')) {
           // Nav2 が計画した経路（2-5）。DB には保存せず、画面に流すだけ
           socketService.broadcastVehiclePath({ id: agvId, ...readPath(message) });

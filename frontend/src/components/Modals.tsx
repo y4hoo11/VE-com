@@ -432,15 +432,19 @@ function VehicleModal({ vehicleId }: { vehicleId?: string }) {
   const v = veh(vehicleId);
   const [id, setId] = useState(v?.id ?? `AGV-0${S.vehicles.length + 1}`);
   const [name, setName] = useState(v?.name ?? `${S.vehicles.length + 1}号機`);
+  const [cam, setCam] = useState(v?.camera ?? '');
+  const [cam2, setCam2] = useState(v?.camera2 ?? '');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     if (!v && !/^AGV-\d{2}$/.test(id)) return setError('車両IDは「AGV-数字2桁」の形にしてください（例: AGV-05）');
     if (!v && veh(id)) return setError('その車両IDはすでに登録されています');
     if (!name.trim()) return setError('名前を入力してください');
+    const badUrl = [cam, cam2].map((u) => u.trim()).some((u) => u && !/^https?:\/\/\S+$/i.test(u));
+    if (badUrl) return setError('カメラの URL は http:// か https:// で始まる形にしてください');
     setBusy(true);
     try {
-      await saveVehicle({ id, name: name.trim() }, !v);
+      await saveVehicle({ id, name: name.trim(), cameraUrl: cam.trim(), camera2Url: cam2.trim() }, !v);
       closeModal();
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存に失敗しました');
@@ -465,6 +469,12 @@ function VehicleModal({ vehicleId }: { vehicleId?: string }) {
       </Field>
       <Field label="表示名">
         <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
+      </Field>
+      <Field label="Pi カメラの映像 URL" hint="例: http://agv-pi.local:8090/stream.mjpg（空欄 = カメラなし）" opt>
+        <input className={inputCls} value={cam} placeholder="http://" onChange={(e) => setCam(e.target.value)} />
+      </Field>
+      <Field label="USB カメラの映像 URL" hint="例: http://agv-pi.local:8091/（空欄 = カメラなし）" opt>
+        <input className={inputCls} value={cam2} placeholder="http://" onChange={(e) => setCam2(e.target.value)} />
       </Field>
     </Frame>
   );

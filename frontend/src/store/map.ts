@@ -259,6 +259,27 @@ function makeApi(id: string) {
     return [{ x: from.x, y: from.y }, ...mid, { x: to.x, y: to.y }];
   };
 
+  // 【仮】デモ用：車体のまわり 8 方向の、壁・棚までの距離（LiDAR の代わり）。
+  // 並びは telemetry の scan8 と同じ [前, 左前, 左, 左後, 後, 右後, 右, 右前]。range [m] より遠い方向は null
+  const scan8At = (p: Pt, theta: number, range = 4): (number | null)[] => {
+    const step = info.resolution;
+    const hit = (a: number) => {
+      for (let d = step; d <= range; d += step) {
+        const c = toCell({ x: p.x + d * Math.cos(a), y: p.y + d * Math.sin(a) });
+        if (!c || info.cells[c.row * info.cols + c.col] === CELL_OCCUPIED) return d;
+      }
+      return null;
+    };
+    return Array.from({ length: 8 }, (_, i) => {
+      let best: number | null = null;
+      for (let k = -20; k <= 20; k += 5) {
+        const d = hit(theta + ((i * 45 + k) * Math.PI) / 180);
+        if (d != null && (best == null || d < best)) best = d;
+      }
+      return best == null ? null : Math.round(best * 100) / 100;
+    });
+  };
+
   // 地点名か別名で探す（ROS の waypoints.yaml と同じく、別名でも指定できる）
   const wpByName = (n: string | null | undefined) => (n ? waypoints.find((w) => w.name === n || w.aliases.includes(n)) : undefined);
 
@@ -270,6 +291,7 @@ function makeApi(id: string) {
     toCell,
     isFree,
     planRoute,
+    scan8At,
     wpByName,
   };
 }
@@ -310,3 +332,4 @@ export const toCell = (p: Pt) => active.toCell(p);
 export const isFree = (p: Pt) => active.isFree(p);
 export const planRoute = (from: Pt, to: Pt) => active.planRoute(from, to);
 export const wpByName = (n: string | null | undefined) => active.wpByName(n);
+export const scan8At = (p: Pt, theta: number, range?: number) => active.scan8At(p, theta, range);
