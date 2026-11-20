@@ -38,9 +38,11 @@ function Root() {
   }, [user?.username, user?.role]);
 
   // テーマ（ライト／ダーク）。ログイン画面にも効く（login-dark.css が html.dark を見る）
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', s.theme === 'dark');
-  }, [s.theme]);
+useEffect(() => {
+  const el = document.documentElement;
+  el.classList.toggle('dark', s.theme === 'dark');
+  el.classList.toggle('gray', s.theme === 'gray');
+}, [s.theme]);
 
   return user ? <Main /> : <Login />;
 }

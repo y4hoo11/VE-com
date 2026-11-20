@@ -1,6 +1,6 @@
 // 横から出てくるパネル（車両・タスク・ログ）。車両の中身は車両詳細ページでも使う
 import type { ReactNode } from 'react';
-import { ERR, PHASE, rosModeText, wpByName, type Vehicle } from '../store/data';
+import { ERR, PHASE, wpByName, type Vehicle } from '../store/data';
 import {
   askCancel,
   askClear,
@@ -21,8 +21,9 @@ import {
   useStore,
   veh,
 } from '../store/store';
-import { Bar, Battery, Btn, Kv, LvChip, PrioChip, Section, TChip, VChip } from './ui';
-import { cx, fmtDT, fmtNum, fmtPct, fmtT, TS_DOT } from './uiUtils';
+import { Bar, Btn, Kv, LvChip, PrioChip, Section, TChip, VChip } from './ui';   // Battery を削除
+import { BatteryGauge } from './BatteryGauge';                                   // 追加
+import { cx, fmtDT, fmtPct, fmtT, TS_DOT } from './uiUtils';
 
 export function DrawerHost() {
   const s = useStore();
@@ -79,9 +80,7 @@ export function DrawerHost() {
 export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }) {
   useStore();
   const t = task(v.taskId);
-  const vbat = v.vbat == null ? '' : `（${v.vbat.toFixed(2)} V）`;
   const off = !v.online;
-  const rm = rosModeText(v); // PC1 がいま何をしているか
   // 運行操作を送れないとき（理由をボタンの説明に出す）
   const ng = off ? 'オフラインの車両には送れません' : v.status === 'ERROR' ? '異常中は送れません（先に緊急状態を解除してください）' : null;
   const pauseBtn = v.paused ? (
@@ -96,16 +95,11 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
 
   return (
     <>
-      <div className="flex items-center gap-3">
-        <VChip v={v} />
-        <Battery v={v} />
-        {inDrawer && (
-          <Btn size="sm" onClick={() => nav(`/vehicles/${v.id}`)}>
-            詳細・カメラ
-          </Btn>
-        )}
-        <span className="ml-auto text-xs text-slate-500">最終受信 {off || !v.lastHb ? '—' : fmtT(v.lastHb)}</span>
-      </div>
+     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+  <VChip v={v} />
+  <BatteryGauge value={v.battery} />
+  <span className="ml-auto text-xs text-slate-500">最終受信 {off || !v.lastHb ? '—' : fmtT(v.lastHb)}</span>
+</div>
 
       {v.err && (
         <div className={cx('rounded-lg border p-3 text-sm', v.err.latched ? 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950' : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950')}>
@@ -128,30 +122,11 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
       )}
       {off && <div className="rounded-lg bg-slate-100 p-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">車両からデータが届いていません（OFFLINE）。電源とネットワークを確認してください。操作はできません。</div>}
 
+      {/* 車両データの場所取り（カメラ画面へ移動予定。実装は別担当） */}
       <Section title="車両データ">
-        <Kv
-          rows={[
-            ['位置', off ? '—' : `x ${v.x.toFixed(2)} / y ${v.y.toFixed(2)} m`],
-            ['向き', off ? '—' : `${Math.round((v.theta * 180) / Math.PI)}°`],
-            ['速度', off ? '—' : fmtNum(v.speed, 2, ' m/s')],
-            ['自己位置の確かさ', off || v.loc == null ? '—' : <span className={cx(v.loc < 0.6 && 'font-bold text-red-600')}>{Math.round(v.loc * 100)}%</span>],
-            ['バッテリー', v.battery == null ? '—' : `${Math.round(v.battery)}% ${vbat}`],
-            ['ラズパイ温度', off ? '—' : fmtNum(v.piTemp, 1, ' ℃')],
-            ['ESP32 / LiDAR', off ? '—' : `${v.esp32 == null ? '—' : v.esp32 ? '正常' : '異常'} / ${fmtNum(v.lidarHz, 1, ' Hz')}`],
-            ['行き先', v.goal ? `${v.goal}${wpByName(v.goal) ? `（${wpByName(v.goal)!.label}）` : ''}` : '—'],
-            [
-              '動作',
-              rm ? (
-                <span className={cx(rm.tone === 'warn' && 'font-bold text-amber-700 dark:text-amber-400')}>
-                  {rm.label}
-                  {rm.note && <span className="font-normal text-slate-500">（{rm.note}）</span>}
-                </span>
-              ) : (
-                '—'
-              ),
-            ],
-          ]}
-        />
+        <div className="flex min-h-48 items-center justify-center rounded-lg border border-dashed border-slate-300 text-xs text-slate-400 dark:border-slate-600">
+          カメラ画面に移動予定
+        </div>
       </Section>
 
       <Section title="実行中のタスク">
@@ -195,27 +170,28 @@ export function VehiclePanel({ v, inDrawer }: { v: Vehicle; inDrawer?: boolean }
       {S.user.role !== 'VIEWER' && (
         <Section title="移動の指示">
           <div className="flex flex-wrap gap-2">
-            <Btn size="sm" disabled={!!ng} title={ng ?? undefined} onClick={() => startMapMode('goto', v.id)}>
-              地点へ移動
-            </Btn>
             <Btn size="sm" disabled={!!ng} title={ng ?? undefined} onClick={() => askHome(v.id)}>
-              ホームへ戻る
-            </Btn>
-            <Btn size="sm" disabled={!!ng} title={ng ?? undefined} onClick={() => startMapMode('pose', v.id)}>
-              現在地を設定
+              充電箇所に戻る
             </Btn>
           </div>
         </Section>
       )}
 
-      <button
-        type="button"
-        disabled={off || v.status === 'ERROR'}
-        onClick={() => estop(v.id)}
-        className="w-full rounded-lg bg-red-600 py-3.5 text-base font-extrabold tracking-wider text-white hover:bg-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-red-300 dark:disabled:bg-red-950"
-      >
-        {v.status === 'ERROR' ? '停止中' : `■ ${v.name} を緊急停止`}
-      </button>
+      <div className="space-y-2">
+  {inDrawer && (
+    <Btn className="w-full" onClick={() => nav(`/vehicles/${v.id}`)}>
+      カメラ・操作
+    </Btn>
+  )}
+  <button
+    type="button"
+    disabled={off || v.status === 'ERROR'}
+    onClick={() => estop(v.id)}
+    className="w-full rounded-lg bg-red-600 py-3.5 text-base font-extrabold tracking-wider text-white hover:bg-red-700 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-red-300 dark:disabled:bg-red-950"
+  >
+    {v.status === 'ERROR' ? '停止中' : `■ ${v.name} を緊急停止`}
+  </button>
+</div>
     </>
   );
 }

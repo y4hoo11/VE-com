@@ -147,7 +147,9 @@ interface VehicleUpdate {
 // ---------------------------------------------------------------
 // 端末ごとに覚えておく表示の設定（ブラウザに保存）
 const PREF_KEY = 'vecom_prefs';
-type Prefs = { theme: 'light' | 'dark'; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; demo?: boolean };
+export type Theme = 'light' | 'gray' | 'dark';
+const THEMES: Theme[] = ['light', 'gray', 'dark'];
+type Prefs = { theme: Theme; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; demo?: boolean };
 export type OpsSettings = { battWarn: number; battMin: number };
 const loadPrefs = (): Partial<Prefs> => {
   try {
@@ -193,7 +195,7 @@ export const S = {
   mapMode: null as MapMode,
   mapPick: null as string | null, // 画面で選んだ地図（運行モニター・地図の画面の切り替え）
   view: { grid: false, path: true, labels: true, ...prefs.view },
-  theme: (prefs.theme ?? 'light') as 'light' | 'dark',
+ theme: (THEMES.includes(prefs.theme as Theme) ? prefs.theme : 'light') as Theme,
   sound: prefs.sound ?? true,
   // 運行の設定。battWarn・battMin はサーバー（GET /api/settings）から読む。maxSpeed・obstacle は表示だけ
   ops: { battWarn: 30, battMin: 20, maxSpeed: 5, obstacle: 0.45 }, // maxSpeed は km/h

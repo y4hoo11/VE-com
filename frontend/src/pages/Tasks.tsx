@@ -6,12 +6,12 @@ import { Bar, Btn, Card, inputCls, PrioChip, TChip } from '../components/ui';
 import { cx, fmtDT, fmtPct } from '../components/uiUtils';
 
 const TABS: [string, string, (t: Task) => boolean][] = [
+  ['all', 'すべて', () => true],
   ['open', '未完了', (t) => ['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(t.status)],
   ['pending', '未割当', (t) => t.status === 'PENDING'],
   ['running', '実行中', (t) => t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS'],
   ['done', '完了', (t) => t.status === 'COMPLETED'],
   ['ng', '失敗・取消', (t) => t.status === 'FAILED' || t.status === 'CANCELLED'],
-  ['all', 'すべて', () => true],
 ];
 const ORDER: Record<string, number> = { IN_PROGRESS: 0, ASSIGNED: 1, PENDING: 2 };
 

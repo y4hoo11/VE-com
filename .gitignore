@@ -50,3 +50,4 @@ __pycache__/
 firmware/.pio/
 firmware/.clang_complete
 firmware/.gcc-flags.json
+/generated/prisma

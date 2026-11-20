@@ -71,6 +71,12 @@ function Row({ label, hint, children }: { label: string; hint?: ReactNode; child
 // まだ動かない項目の目印（画面だけ先に用意している）
 const Soon = () => <Tag>準備中</Tag>;
 
+const THEMES = [
+  ['light', 'ライト'],
+  ['gray', 'グレイ'],
+  ['dark', 'ダーク'],
+] as const;
+
 function Display() {
   const s = useStore();
   const set = (fn: () => void) => {
@@ -80,16 +86,16 @@ function Display() {
   };
   return (
     <Card title={<>表示 <span className="text-xs font-normal text-slate-500">この端末のブラウザに保存されます</span></>} bodyClass="px-5">
-      <Row label="テーマ">
-        <div className="flex gap-4 text-sm">
-          {(['light', 'dark'] as const).map((t) => (
-            <label key={t} className="flex items-center gap-1.5">
-              <input type="radio" checked={s.theme === t} onChange={() => set(() => (s.theme = t))} />
-              {t === 'light' ? 'ライト' : 'ダーク'}
-            </label>
-          ))}
-        </div>
-      </Row>
+      <Row label="テーマ" hint="グレイは、ライトより明るさを抑えた落ち着いた配色です">
+  <div className="flex gap-4 text-sm">
+    {THEMES.map(([t, label]) => (
+      <label key={t} className="flex items-center gap-1.5">
+        <input type="radio" checked={s.theme === t} onChange={() => set(() => (s.theme = t))} />
+        {label}
+      </label>
+    ))}
+  </div>
+</Row>
       <Row label="表示言語">
         <div className="flex items-center gap-2">
           <select disabled className={cx(inputCls, 'w-40!')} value="ja">
