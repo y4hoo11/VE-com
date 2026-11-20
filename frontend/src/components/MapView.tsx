@@ -6,6 +6,26 @@ import { MAP, MAP_IMAGE } from '../store/map';
 import { askGoto, cancelMapMode, closePop, mapModeClick, nearestWp, setMapCursor, togglePop, useStore, veh } from '../store/store';
 import { cx } from './uiUtils';
 
+// 車両の見た目（ログイン画面の AGV と同じ形。原点が中心で、前方が +x）
+// 前方のセンサーと中央の点だけ、車両の状態の色にする
+function AgvIcon({ color }: { color: string }) {
+  return (
+    <g>
+      {/* タイヤ */}
+      <rect x={-26} y={-22} width={12} height={5} rx={1.5} fill="#1b1c20" />
+      <rect x={14} y={-22} width={12} height={5} rx={1.5} fill="#1b1c20" />
+      <rect x={-26} y={17} width={12} height={5} rx={1.5} fill="#1b1c20" />
+      <rect x={14} y={17} width={12} height={5} rx={1.5} fill="#1b1c20" />
+      {/* 車体と荷台 */}
+      <rect x={-36} y={-16} width={72} height={32} rx={8} fill="#3a3d45" stroke="#4d505a" strokeWidth={1.5} />
+      <rect x={-27} y={-11} width={40} height={22} rx={4} fill="#2b2d33" stroke="#4d505a" />
+      {/* 前方のセンサーと点（状態の色） */}
+      <rect x={30} y={-12} width={5} height={24} rx={2} fill={color} />
+      <circle cx={22} cy={0} r={2.5} fill={color} />
+    </g>
+  );
+}
+
 // 地図の座標 [m]（Nav2 の map 座標。左下が origin）→ SVG の座標（1m = 100、上が 0）
 const W = MAP.width * 100;
 const H = MAP.height * 100;
@@ -174,9 +194,11 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
               {v.status === 'ERROR' && <circle r={30} fill="none" stroke="#dc2626" strokeWidth={6} className="pulse-ring" />}
               {v.id === selected && <circle r={44} fill="none" stroke="#2563eb" strokeWidth={5} strokeDasharray="8 6" />}
               <g transform={`rotate(${deg})`}>
-                <circle r={38} fill="transparent" />
-                <polygon points="34,0 -22,-22 -12,0 -22,22" fill={col} stroke="white" strokeWidth={5} strokeLinejoin="round" />
-              </g>
+  <circle r={38} fill="transparent" />
+  <g transform="scale(0.8)">
+    <AgvIcon color={col} />
+  </g>
+</g>
               <text y={-50} textAnchor="middle" fontSize={28} fontWeight={800} fill={col} stroke="white" strokeWidth={6} paintOrder="stroke">
                 {v.name}
                 {v.paused && v.status === 'RUNNING' ? ' ⏸' : ''}

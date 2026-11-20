@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant gray (&:where(.gray, .gray *));
 
 html,
 body,
@@ -13,6 +14,21 @@ body {
   min-width: 1280px;
   font-family: "Yu Gothic UI", "Meiryo", "Hiragino Sans", system-ui, sans-serif;
   font-size: 14px;
+}
+
+html.gray {
+  color-scheme: light;
+  --color-white: #cdd2d9;      /* カード・入力欄 */
+  --color-slate-50: #bcc2cb;   /* 表の見出し */
+  --color-slate-100: hsla(0, 1%, 21%, 0.651);  /* ページ背景・区切り線・ホバー */
+  --color-slate-200: #9ba3af;
+  --color-slate-300: #858d9a;
+  --color-slate-400: #4b5563;  /* 補助の文字 */
+  --color-slate-500: #374151;
+  --color-slate-600: #1f2937;
+  --color-slate-800: #111827;  /* 本文 */
+  --color-blue-50: #b3c4de;    /* 選択中のメニュー */
+  --color-blue-100: #a0b6d6;
 }
 
 /* 異常の車両のまわりに広がる赤い輪 */

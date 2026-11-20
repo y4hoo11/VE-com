@@ -43,11 +43,11 @@ export function VChip({ v }: { v: Vehicle }) {
 }
 
 const TS_CLASS: Record<TStatus, string> = {
-  PENDING: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200',
+  PENDING: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200 gray:bg-slate-400 gray:text-slate-900',
   ASSIGNED: 'bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
   IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   COMPLETED: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300',
-  CANCELLED: 'bg-slate-100 text-slate-500 line-through dark:bg-slate-700 dark:text-slate-400',
+  CANCELLED: 'bg-slate-100 text-slate-500 line-through dark:bg-slate-700 dark:text-slate-400 gray:bg-slate-400 gray:text-slate-800',
   FAILED: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
 };
 export function TChip({ s }: { s: TStatus }) {
@@ -56,7 +56,7 @@ export function TChip({ s }: { s: TStatus }) {
 
 export function LvChip({ l }: { l: Level }) {
   const c = {
-    INFO: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+    INFO: 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300',
     WARN: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     ERROR: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
   }[l];
@@ -65,7 +65,7 @@ export function LvChip({ l }: { l: Level }) {
 
 export function PrioChip({ p }: { p: number }) {
   return (
-    <span className={cx('inline-block rounded px-1.5 py-0.5 text-xs font-bold', p >= 4 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300')}>
+    <span className={cx('inline-block rounded px-1.5 py-0.5 text-xs font-bold', p >= 4 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300 gray:bg-slate-400 gray:text-slate-900')}>
       P{p}
     </span>
   );

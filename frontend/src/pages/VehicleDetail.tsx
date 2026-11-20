@@ -287,7 +287,6 @@ function Key({ k, on }: { k: string; on?: boolean }) {
 }
 
 // カメラ映像（PC1 の marker_localizer が配信する MJPEG）。URL を保存する仕組みは未対応
-// 高さに上限（max-h-72）を付けて、縦に伸びすぎないようにしている
 function Camera({ v }: { v: Vehicle }) {
   const msg = !v.camera
     ? 'カメラ映像が登録されていません'

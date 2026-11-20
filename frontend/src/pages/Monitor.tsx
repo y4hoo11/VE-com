@@ -1,10 +1,11 @@
 // 運行モニター（ホーム）：地図＋車両一覧＋最新のログ。普段開いておく画面
 import { Link } from 'react-router-dom';
-import { COL, PHASE, rosModeText, TS } from '../store/data';
+import { COL, PAUSED_COL, PHASE, rosModeText, TS } from '../store/data';
 import { MAP } from '../store/map';
 import { emit, estop, openLog, openVehicle, S, savePrefs, task, useStore } from '../store/store';
 import { MapView } from '../components/MapView';
-import { Bar, Battery, Btn, Card, LvChip, VChip } from '../components/ui';
+import { Bar, Btn, Card, LvChip, VChip } from '../components/ui';
+import { BatteryGauge, LOW_BATTERY } from '../components/BatteryGauge';
 import { cx, fmtNum, fmtPct, fmtT } from '../components/uiUtils';
 
 export function Monitor() {
@@ -67,31 +68,35 @@ export function Monitor() {
           const t = task(v.taskId);
           const sel = s.drawer?.type === 'vehicle' && s.drawer.id === v.id;
           const rm = rosModeText(v);
+          const col = v.paused && v.status === 'RUNNING' ? PAUSED_COL : COL[v.status]; // 地図の車両と同じ色
+          const lowBattery = v.battery != null && v.battery <= LOW_BATTERY;
           return (
             <div
               key={v.id}
               role="button"
               tabIndex={0}
               onClick={() => openVehicle(v.id)}
+              style={{ borderColor: col }}
               className={cx(
-                'cursor-pointer rounded-lg border p-3 transition hover:border-blue-400',
-                sel ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900' : 'border-slate-200 dark:border-slate-700',
-                v.status === 'ERROR' && 'border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/40',
-                !v.online && 'opacity-60',
+                'cursor-pointer rounded-lg border-2 p-3 transition hover:shadow-md',
+                sel && 'ring-2 ring-blue-300 dark:ring-blue-800',
+                v.status === 'ERROR' && 'bg-red-50/60 dark:bg-red-950/40',
+                v.status !== 'ERROR' && lowBattery && 'bg-orange-100 dark:bg-orange-900/40',
+                !v.online && 'border-dashed opacity-60',
               )}
             >
               <div className="flex items-center gap-2">
-                <b>{v.name}</b>
-                <span className="text-xs text-slate-500">{v.id}</span>
+                <b className="text-lg">{v.name}</b>
+                <span className="text-sm text-slate-500">{v.id}</span>
                 <div className="flex-1" />
                 <VChip v={v} />
               </div>
-              <div className="mt-1 flex gap-3 text-xs text-slate-600 dark:text-slate-300">
-                <Battery v={v} />
+              <div className="mt-2 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+                <BatteryGauge value={v.battery} />
                 <span>{v.online ? fmtNum(v.speed, 1, ' m/s') : '—'}</span>
                 <span>自己位置 {v.online && v.loc != null ? `${Math.round(v.loc * 100)}%` : '—'}</span>
               </div>
-              <div className="mt-2 text-xs">
+              <div className="mt-2 text-sm">
                 {t ? (
                   <>
                     <div className="mb-1 truncate">
@@ -110,12 +115,12 @@ export function Monitor() {
               </div>
               {/* 止まっている理由など、気にした方がよい動作だけ出す（移動中・荷待ちは上の表示でわかる） */}
               {!v.err && rm?.tone === 'warn' && (
-                <div className="mt-2 truncate text-xs font-semibold text-amber-700 dark:text-amber-400">
+                <div className="mt-2 truncate text-sm font-semibold text-amber-700 dark:text-amber-400">
                   ⏸ {rm.label}
                   {rm.note && `（${rm.note}）`}
                 </div>
               )}
-              {v.err && <div className="mt-2 truncate text-xs font-semibold text-red-600">⚠ {v.err.reason}</div>}
+              {v.err && <div className="mt-2 truncate text-sm font-semibold text-red-600">⚠ {v.err.reason}</div>}
               <div className="mt-2 flex justify-end">
                 <Btn
                   size="sm"
