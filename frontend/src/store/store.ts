@@ -8,6 +8,7 @@ import { isAxiosError } from 'axios';
 import { api } from '../services/api';
 import { emitWithAck, socket } from '../services/socket';
 import { demoOn, resetDemo, setDemoEnabled, setDemoUser } from '../services/demo'; // 【仮】デモモード
+import { DEFAULT_MAP_ID, hasMap, setActiveMap } from './map';
 import {
   approvalsOf,
   ERR,
@@ -81,6 +82,8 @@ interface ApiVehicle {
   currentTheta: number | null;
   currentMapId: string | null;
   lastHeartbeat: string | null;
+  cameraUrl?: string | null;
+  camera2Url?: string | null;
 }
 interface ApiTask {
   id: string;
@@ -117,6 +120,9 @@ interface VehicleUpdate {
   emergencyReason?: string | null;
   emergencyCode?: string | null;
   emergencySource?: string | null;
+  currentMapId?: string | null;
+  cameraUrl?: string | null; // 車両の設定でカメラの URL が変わったとき
+  camera2Url?: string | null;
   telemetry?: {
     speed?: number;
     locQuality?: number;
@@ -129,6 +135,8 @@ interface VehicleUpdate {
     paused?: boolean;
     mode?: string; // NAV・WAIT・MANUAL・PAUSED・HOLD・RETRY_WAIT・IDLE・OFFLINE
     note?: string; // mode の補足（HOLD の理由など）
+    scan8?: (number | null)[]; // LiDAR 8 方向の距離 [m]（Vehicle.scan8 と同じ並び）
+    usFront?: number | null; // 前の超音波の距離 [m]
   };
   // 【仮】デモモードのときだけ届く（実機の telemetry には無い項目）
   demo?: { paused: boolean; route: Pt[]; routeTotal: number; mode: Vehicle['mode']; wait: number; progress: number | null };
@@ -185,6 +193,7 @@ export const S = {
   modal: null as ModalState,
   popover: null as PopoverState,
   mapMode: null as MapMode,
+  mapPick: null as string | null, // 画面で選んだ地図（運行モニター・地図の画面の切り替え）
   view: { grid: false, path: true, labels: true, ...prefs.view },
  theme: (THEMES.includes(prefs.theme as Theme) ? prefs.theme : 'light') as Theme,
   sound: prefs.sound ?? true,
@@ -205,7 +214,28 @@ const subscribe = (f: () => void) => {
     listeners.delete(f);
   };
 };
+// 表示する地図：地図で指定中の車両 → 車両詳細のページの車両 → 開いている車両 → 画面で選んだ地図 → 最初の車両 → demo_map
+export function wantedMapId(): string {
+  const pageVid = window.location.hash.match(/^#\/vehicles\/([^/?]+)/)?.[1];
+  const ids = [
+    S.mapMode && veh(S.mapMode.vid)?.mapId,
+    pageVid && veh(decodeURIComponent(pageVid))?.mapId,
+    S.drawer?.type === 'vehicle' ? veh(S.drawer.id)?.mapId : null,
+    S.mapPick,
+    S.vehicles.find((v) => hasMap(v.mapId))?.mapId,
+  ];
+  return ids.find(hasMap) ?? DEFAULT_MAP_ID;
+}
+
+/** 地図を選ぶ（運行モニター・地図の画面）。開いている車両が別の地図なら、ドロワーは閉じる */
+export function pickMap(id: string) {
+  S.mapPick = id;
+  if (S.drawer?.type === 'vehicle' && veh(S.drawer.id)?.mapId !== id) S.drawer = null;
+  emit();
+}
+
 export function emit() {
+  setActiveMap(wantedMapId());
   version++;
   listeners.forEach((f) => f());
 }
@@ -311,7 +341,11 @@ function toVehicle(a: ApiVehicle, prev?: Vehicle): Vehicle {
     esp32: prev?.esp32 ?? null,
     lidarHz: prev?.lidarHz ?? null,
     vbat: prev?.vbat ?? null,
+    scan8: prev?.scan8 ?? null,
+    usFront: prev?.usFront ?? null,
+    sensorAt: prev?.sensorAt ?? 0,
     online: a.status !== 'OFFLINE',
+    mapId: a.currentMapId ?? prev?.mapId ?? null,
     paused: false,
     wait: 0,
     taskId: null,
@@ -324,7 +358,8 @@ function toVehicle(a: ApiVehicle, prev?: Vehicle): Vehicle {
     mode: 'IDLE',
     err: prev?.status === 'ERROR' && a.status === 'ERROR' ? prev.err : null,
     prevStatus: a.status,
-    camera: '', // カメラ映像のURLは、保存する仕組みができたら入れる
+    camera: a.cameraUrl ?? '',
+    camera2: a.camera2Url ?? '',
     lastHb: ms(a.lastHeartbeat) ?? 0,
   };
 }
@@ -528,7 +563,14 @@ function listen() {
       return;
     }
     if (u.name !== undefined) v.name = u.name;
+    if (u.cameraUrl !== undefined) v.camera = u.cameraUrl ?? '';
+    if (u.camera2Url !== undefined) v.camera2 = u.camera2Url ?? '';
     if (u.batteryLevel !== undefined) v.battery = u.batteryLevel;
+    if (u.currentMapId && u.currentMapId !== v.mapId) {
+      // 別の地図に変わったら通知する（最初に分かったときは通知しない）
+      if (v.mapId) S.notes.unshift({ id: S.seq.note++, vid: v.id, text: `${v.name}: 地図が ${v.mapId} から ${u.currentMapId} に変わりました`, at: now(), read: false });
+      v.mapId = u.currentMapId;
+    }
     if (u.currentX != null) v.x = u.currentX;
     if (u.currentY != null) v.y = u.currentY;
     if (u.currentTheta != null) v.theta = u.currentTheta;
@@ -540,6 +582,9 @@ function listen() {
       if (tm.esp32 !== undefined) v.esp32 = tm.esp32;
       if (tm.lidarHz !== undefined) v.lidarHz = tm.lidarHz;
       if (tm.vbat !== undefined) v.vbat = tm.vbat;
+      if (tm.scan8 !== undefined) v.scan8 = tm.scan8;
+      if (tm.usFront !== undefined) v.usFront = tm.usFront;
+      if (tm.scan8 !== undefined || tm.usFront !== undefined) v.sensorAt = now();
       if (tm.phase !== undefined) v.phase = (['TO_START', 'LOADING', 'TO_TARGET', 'UNLOADING'].includes(tm.phase) ? tm.phase : null) as Phase | null;
       if (tm.goal !== undefined) v.goal = tm.goal || null;
       if (tm.paused !== undefined) v.paused = tm.paused;
@@ -588,7 +633,15 @@ function listen() {
     if (S.logs.some((x) => x.id === l.id)) return;
     S.logs.unshift(l);
     if (S.logs.length > 500) S.logs.length = 500;
-    if (l.level === 'ERROR' && l.vid) {
+    // 地図の切り替えの結果（backend が details.kind = 'MAP' で残す）。
+    // 切り替わった（CHANGED）ことは vehicle:update の地図の変化でお知らせを出すので、ここでは待ち・失敗などだけ出す。音は鳴らさない
+    const mapState = l.details?.kind === 'MAP' ? String(l.details.state ?? '') : null;
+    if (mapState !== null) {
+      if (l.vid && mapState !== 'CHANGED') {
+        const v = veh(l.vid);
+        S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
+      }
+    } else if (l.level === 'ERROR' && l.vid) {
       const v = veh(l.vid);
       S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
       if (S.sound) playAlarm();
@@ -619,6 +672,16 @@ function listen() {
     if (t && p.progress != null) t.progress = p.progress;
     const v = veh(p.vehicleId);
     if (v && p.phase) v.phase = p.phase as Phase;
+    emit();
+  });
+
+  // 障害物までの距離（ラズパイの agv/{id}/clearance、1秒に5回）。telemetry の scan8・usFront と同じ形
+  on('vehicle:clearance', (p: { id: string; scan8?: (number | null)[]; usFront?: number | null }) => {
+    const v = veh(p.id);
+    if (!v) return;
+    if (Array.isArray(p.scan8) && p.scan8.length === 8) v.scan8 = p.scan8;
+    if (p.usFront !== undefined) v.usFront = p.usFront;
+    v.sensorAt = now();
     emit();
   });
 
@@ -1035,16 +1098,18 @@ export async function changePassword(currentPassword: string, newPassword: strin
 // 設定（車両）— POST / PATCH / DELETE /api/vehicles（ADMIN のみ）
 // ---------------------------------------------------------------
 // 成功したら true。失敗したら Error（画面にそのまま出す文言）を投げる
-export async function saveVehicle(d: { id: string; name: string }, isNew: boolean) {
+// cameraUrl・camera2Url は空なら「未登録」にする
+export async function saveVehicle(d: { id: string; name: string; cameraUrl: string; camera2Url: string }, isNew: boolean) {
+  const cams = { cameraUrl: d.cameraUrl || null, camera2Url: d.camera2Url || null };
   try {
-    if (isNew) await api.post('/vehicles', d);
-    else await api.patch(`/vehicles/${encodeURIComponent(d.id)}`, { name: d.name });
+    if (isNew) await api.post('/vehicles', { id: d.id, name: d.name, ...cams });
+    else await api.patch(`/vehicles/${encodeURIComponent(d.id)}`, { name: d.name, ...cams });
   } catch (e) {
     throw new Error(errMsg(e, isNew ? '車両の登録に失敗しました' : '車両の保存に失敗しました'), { cause: e });
   }
   // 一覧の更新は vehicles:changed / vehicle:update で届くが、届く前に画面を合わせておく
   const v = veh(d.id);
-  if (v) v.name = d.name;
+  if (v) Object.assign(v, { name: d.name, camera: d.cameraUrl, camera2: d.camera2Url });
   else await loadVehicles().then(relink).catch(() => {});
   emit();
   toast(isNew ? `${d.name}（${d.id}）を登録しました` : `${d.name} を保存しました`, 'ok');

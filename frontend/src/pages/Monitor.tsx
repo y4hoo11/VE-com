@@ -31,9 +31,7 @@ export function Monitor() {
         title={
           <>
             倉庫マップ
-            <span className="text-xs font-normal text-slate-500">
-              {MAP.id} ・ {MAP.width.toFixed(0)}m × {MAP.height.toFixed(0)}m
-            </span>
+            <MapSwitch />
           </>
         }
         right={
@@ -54,6 +52,7 @@ export function Monitor() {
         bodyClass="relative"
       >
         <MapView mapKey="main" />
+        <OtherMapBanner />
       </Card>
 
       <Card
@@ -66,6 +65,7 @@ export function Monitor() {
       >
         {s.vehicles.map((v) => {
           const t = task(v.taskId);
+          const otherMap = !!v.mapId && v.mapId !== MAP.id;
           const sel = s.drawer?.type === 'vehicle' && s.drawer.id === v.id;
           const rm = rosModeText(v);
           const col = v.paused && v.status === 'RUNNING' ? PAUSED_COL : COL[v.status]; // 地図の車両と同じ色

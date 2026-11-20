@@ -35,7 +35,7 @@ ROBOT_DEFAULTS = {
         "drive_timeout_s": 0.5, "max_throttle": 0.6,
     },
     "battery": {"empty_v": 6.6, "full_v": 8.2},
-    "rates": {"control_hz": 20.0, "info_hz": 1.0},
+    "rates": {"control_hz": 20.0, "info_hz": 1.0, "clearance_hz": 5.0},
 }
 
 
@@ -68,6 +68,33 @@ def scan_to_points(ranges, angle_min: float, angle_increment: float, mount: tupl
     return np.column_stack([mount[0] + r * np.cos(a), mount[1] + r * np.sin(a)])
 
 
+# Web の車両詳細ページの「アラウンドビュー」（SonarView）に出す 8 方向（Web の scan8 と同じ並び）。
+# 前から反時計回り（左回り）に 45° ずつ、それぞれ ±22.5° の範囲
+SCAN8_NAMES = ("前", "左前", "左", "左後", "後", "右後", "右", "右前")
+
+
+def scan8(points, length: float, width: float) -> list[float | None]:
+    """車体のまわり 8 方向それぞれで、車体の外形（長方形）からいちばん近い物までの距離 [m]。
+
+    points は車体座標 (base_link。x が前、y が左) の点 [N,2]。並びは SCAN8_NAMES。物が見えない方向は None。
+    車体の外形の内側に入る点（車体自身の反射）は数えない。
+    """
+    out: list[float | None] = [None] * 8
+    if points is None or len(points) == 0:
+        return out
+    p = np.asarray(points, dtype=np.float64)
+    x, y = p[:, 0], p[:, 1]
+    d = np.hypot(np.maximum(np.abs(x) - length / 2.0, 0.0), np.maximum(np.abs(y) - width / 2.0, 0.0))
+    ang = np.degrees(np.arctan2(y, x))                        # 前 0°、左回り +
+    k = np.floor(((ang + 22.5) % 360.0) / 45.0).astype(int) % 8   # 0 = 前（-22.5〜22.5°）、1 = 左前 …
+    outside = d > 0.0
+    for i in range(8):
+        m = outside & (k == i)
+        if m.any():
+            out[i] = round(float(d[m].min()), 2)
+    return out
+
+
 class RobotCore:
     def __init__(self, cfg):
         veh = cfg["vehicle"]
@@ -81,6 +108,8 @@ class RobotCore:
         sm_cfg = cfg["speed_model"]
         self.speed_model = SpeedModel(sm_cfg)
         self.converter = CmdVelConverter(veh, self.speed_model)
+        self.body_length = float(veh.get("length", 0.42))
+        self.body_width = float(veh.get("width", 0.19))
         self.odom = WheelOdometry(veh, self.speed_model, float(sm_cfg.get("tau_s", 0.25)),
                                   float(sm_cfg.get("ticks_per_meter", 0.0)))
         lz = cfg["laser"]
@@ -107,6 +136,14 @@ class RobotCore:
             self.points = pts
             self.scan_time = now
         return pts
+
+    def scan8(self, now: float, max_age: float = 1.0) -> list[float | None] | None:
+        """8 方向の距離 [m]（Web のアラウンドビュー用）。LiDAR のデータが古いときは None。"""
+        with self.lock:
+            pts, st = self.points, self.scan_time
+        if pts is None or now - st > max_age:
+            return None
+        return scan8(pts, self.body_length, self.body_width)
 
     def on_telemetry(self, t: dict, now: float) -> bool:
         return self.odom.update(t, now)

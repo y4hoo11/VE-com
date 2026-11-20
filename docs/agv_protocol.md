@@ -62,6 +62,7 @@ PC1 の `mqtt_bridge` が受け取り、ROS の `agv/command` として `mission
 | 現在地を手動設定 | `{"action":"SET_POSE","x":-4.0,"y":-4.0,"theta":0.0}` | PC1 |
 | 荷積み/荷降ろし完了 | `{"action":"CONFIRM"}`（`wait_mode: confirm` のとき） | PC1 |
 | 手動操縦（追加） | `{"action":"MANUAL_DRIVE","linear":0.2,"angular":0.0}` | PC1 |
+| 地図の切り替え（追加） | `{"action":"SET_MAP","mapId":"warehouse_a"}`（ふつうは 2-8 の全車両向けを使う。1台だけ試すとき用） | PC1 |
 
 `startLocation` / `targetLocation` は `edge_ai/ros2_ws/src/agv_navigation/config/waypoints.yaml` の名前（または別名）。
 `"1.5,-2.0"` のような「x,y」文字列も使えます。
@@ -170,6 +171,22 @@ Nav2 が計画した経路を間引いたもの（1秒に1回まで）。行き�
 PC1 の `mqtt_bridge` が接続時に `{"online":true}` を retain で出す。切れると遺言（LWT）で `{"online":false}`。
 車両（ラズパイ）からデータが来ていないときは telemetry の `status` が `OFFLINE` になる。
 
+### 2-7. 車両 → (Web): `agv/{id}/clearance`（表示用）
+
+障害物までの距離。車両詳細ページの「物理センサー（アラウンドビュー）」に出す。
+ラズパイの `serial_bridge` が 1秒に5回（`robot.yaml` の `rates.clearance_hz`）出し、PC1 の `mqtt_bridge` がそのまま MQTT へ流す。QoS 0・retain なし。
+
+```json
+{"scan8":[0.35,1.2,null,0.7,1.6,null,0.95,1.8],"usFront":null}
+```
+
+- `scan8`: LiDAR を 8 方向に分けた、それぞれでいちばん近い物までの距離 [m]。並びは **[前, 左前, 左, 左後, 後, 右後, 右, 右前]**
+  （前から反時計回りに 45° ずつ、各 ±22.5°）。物が見えない方向は `null`
+- 距離は **車体の外形（`robot.yaml` の `vehicle.length`・`width` の長方形）から** 測る。車体の中に入る点（自分の反射）は数えない
+- `usFront`: 前の超音波 [m]。付いていない（`US_ENABLE 0`）・範囲外は `null`
+- LiDAR のデータが1秒より古いときは送らない（Web は3秒届かなければ「データなし」にする）
+- telemetry の `scan8`・`usFront`（偽の PC1・デモが使う）と同じ形。backend は DB に保存せず、Socket.IO の `vehicle:clearance`（`{id, scan8, usFront}`）で画面に流すだけ
+
 ### （廃止）PC1 ⇔ ラズパイの MQTT・カメラの WebSocket
 
 以前の Python 版にあった `agv/{id}/drive` `odom` `scan` `safety`、`ai/online`、
@@ -178,6 +195,49 @@ PC1 の `mqtt_bridge` が接続時に `{"online":true}` を retain で出す。�
 一覧は `edge_ai/README.md` の 5章。
 
 マーカー解析つきのカメラ映像は `http://<PC1>:5000/video`（MJPEG）。Web では `<img src=…>` で表示できる。
+
+### 2-8. PC2 → 全車両: `agv/config/map`（追加。retain）
+
+使う地図（全車両共通）。Web の設定「使用する地図の切り替え」（DB の `system_settings` の `map.active`）が正本。
+
+```json
+{"mapId":"warehouse_a"}
+```
+
+- backend が **retain** で出す。出すのは「設定の変更が適用されたとき」と「MQTT につながったとき」。
+  retain なので、あとから起動した車両もつないだ時点で受け取る
+- PC1 の `mqtt_bridge` が受け取り、ROS の `agv/map_config`（ラッチ）で `mission_manager` に渡す（中身は SET_MAP と同じ扱い）
+- `mapId` は地図ファイルの名前（`agv_navigation/maps/<mapId>.yaml`）。地点は `config/waypoints/<mapId>.yaml`（無ければ共通の `waypoints.yaml`）
+
+PC1（mission_manager）の動き:
+
+| 状況 | 動き | 2-9 の `state` |
+|---|---|---|
+| すでにその地図 | 何もしない | （送らない） |
+| 起動時に `map:=` を指定した（開発用） | 切り替えない（`map:=` が優先） | `LOCKED` |
+| タスク中・待ち行列あり・手動操縦中・走行中 | 止まるまで待ってから切り替える | `PENDING` → `CHANGED` |
+| 地図ファイルが無い・Nav2 が読めない | 切り替えない（元の地図のまま） | `FAILED` |
+| 止まっている | Nav2 の地図を読み直し（`/map_server/load_map`）、地点を入れ替え、新しい地図の `Home` に現在地を設定 | `CHANGED` |
+
+- 切り替え後の現在地は新しい地図の `Home`（`localization.initial_pose`）。実機では、車両を `Home` に置いてから切り替えること。
+  置いた場所が違うときは Web から「現在地を設定（SET_POSE）」する
+- シミュレーターでは、仮想の世界の地図も切り替わり、車は `Home` に置き直される
+- telemetry（2-2）の `mapId` も新しい地図になる。Web はこれを見て表示する地図を変える
+
+### 2-9. PC1 → PC2: `agv/{id}/map`（追加）
+
+地図の切り替えの結果。emergency（2-3）とは別のトピックにしてある（車両を ERROR にしないため）。
+
+```json
+{"state":"CHANGED","mapId":"warehouse_a","from":"demo_map","reason":"地図を warehouse_a に切り替えました"}
+```
+
+| state | 意味 | backend のログ |
+|---|---|---|
+| `PENDING` | 動いているので、止まるまで待っている | INFO |
+| `CHANGED` | 切り替えた | INFO |
+| `LOCKED` | 起動時に `map:=` を指定しているので切り替えない | WARN |
+| `FAILED` | 切り替えられなかった（`reason` に理由） | ERROR |
 
 ---
 

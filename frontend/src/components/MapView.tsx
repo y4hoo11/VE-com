@@ -1,8 +1,8 @@
 // 地図（SVG）。車両・経路・地点を描き、地図の操作モード（移動先・現在地の指定）も受け持つ
 // ズーム：右下のボタン（＋ － ⤢）。拡大中は何もない所をドラッグして動かす
-import { useRef, useState, type PointerEvent } from 'react';
+import { useMemo, useRef, useState, type PointerEvent } from 'react';
 import { COL, PAUSED_COL, WAYPOINTS, wpByName, type Pt } from '../store/data';
-import { MAP, MAP_IMAGE } from '../store/map';
+import { MAP, MAP_IMAGE, type MapInfo } from '../store/map';
 import { askGoto, cancelMapMode, closePop, mapModeClick, nearestWp, setMapCursor, togglePop, useStore, veh } from '../store/store';
 import { cx } from './uiUtils';
 
@@ -37,22 +37,37 @@ const GRID_Y = Array.from({ length: Math.floor(MAP.height) + 1 }, (_, i) => Math
 
 // 表示範囲（SVG の viewBox）。FULL が全体表示
 type View = { x: number; y: number; w: number; h: number };
-const FULL: View = { x: -40, y: -40, w: W + 80, h: H + 80 };
 const MAX_ZOOM = 8;
 const STEP = 1.25;
 
-// 中心 (cx, cy) を固定して k 倍に拡大（k < 1 で縮小）し、地図の外に出すぎないようにする
-function zoomView(v: View, k: number, cx: number, cy: number): View {
-  const w = Math.min(FULL.w, Math.max(FULL.w / MAX_ZOOM, v.w / k));
-  const h = (w / FULL.w) * FULL.h;
-  const r = w / v.w;
-  return clampView({ x: cx - (cx - v.x) * r, y: cy - (cy - v.y) * r, w, h });
+// 地図の座標 [m]（Nav2 の map 座標。左下が origin）→ SVG の座標（1m = 100、上が 0）。地図が変わるたびに作り直す
+function geometry(m: MapInfo) {
+  const W = m.width * 100;
+  const H = m.height * 100;
+  const X = (x: number) => (x - m.originX) * 100;
+  const Y = (y: number) => (m.originY + m.height - y) * 100;
+  // 方眼（1m ごと）を引く位置
+  const GRID_X = Array.from({ length: Math.floor(m.width) + 1 }, (_, i) => Math.ceil(m.originX) + i).filter((k) => k > m.originX && k < m.originX + m.width);
+  const GRID_Y = Array.from({ length: Math.floor(m.height) + 1 }, (_, i) => Math.ceil(m.originY) + i).filter((k) => k > m.originY && k < m.originY + m.height);
+  // 文字や印の大きさ。16m の地図を基準に、大きい地図では大きくする（縮小表示でも読めるように）
+  const k = Math.max(1, Math.max(m.width, m.height) / 16);
+  const pad = 40 * k;
+  const full: View = { x: -pad, y: -pad, w: W + pad * 2, h: H + pad * 2 };
+  return { W, H, X, Y, GRID_X, GRID_Y, full, k };
 }
-function clampView(v: View): View {
+
+// 中心 (cx, cy) を固定して k 倍に拡大（k < 1 で縮小）し、地図の外に出すぎないようにする
+function zoomView(full: View, v: View, k: number, cx: number, cy: number): View {
+  const w = Math.min(full.w, Math.max(full.w / MAX_ZOOM, v.w / k));
+  const h = (w / full.w) * full.h;
+  const r = w / v.w;
+  return clampView(full, { x: cx - (cx - v.x) * r, y: cy - (cy - v.y) * r, w, h });
+}
+function clampView(full: View, v: View): View {
   return {
     ...v,
-    x: Math.min(FULL.x + FULL.w - v.w, Math.max(FULL.x, v.x)),
-    y: Math.min(FULL.y + FULL.h - v.h, Math.max(FULL.y, v.y)),
+    x: Math.min(full.x + full.w - v.w, Math.max(full.x, v.x)),
+    y: Math.min(full.y + full.h - v.h, Math.max(full.y, v.y)),
   };
 }
 
@@ -67,12 +82,20 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
   const s = useStore();
   const ref = useRef<SVGSVGElement>(null);
   const mm = mapKey === 'wp' ? null : s.mapMode;
+  const map = MAP;
+  const { W, H, X, Y, GRID_X, GRID_Y, full: FULL, k: K } = useMemo(() => geometry(map), [map]);
   const [view, setView] = useState<View>(FULL);
+  // 地図が変わったら全体表示に戻す
+  const [viewMap, setViewMap] = useState(map.id);
+  if (viewMap !== map.id) {
+    setViewMap(map.id);
+    setView(FULL);
+  }
   const pan = useRef<{ px: number; py: number; v: View; scale: number } | null>(null);
   const zoomed = view.w < FULL.w - 0.5;
 
   // ズームは右下のボタンだけ（ホイールでは拡大・縮小しない。スクロールのつもりで地図が動くのを防ぐ）
-  const zoomBtn = (k: number) => setView((v) => zoomView(v, k, v.x + v.w / 2, v.y + v.h / 2));
+  const zoomBtn = (k: number) => setView((v) => zoomView(FULL, v, k, v.x + v.w / 2, v.y + v.h / 2));
   const selected = s.drawer?.type === 'vehicle' ? s.drawer.id : focusId;
 
   const toWorld = (e: PointerEvent): Pt => {
@@ -105,7 +128,7 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
     if (p) {
       const dx = (e.clientX - p.px) / p.scale;
       const dy = (e.clientY - p.py) / p.scale;
-      setView(clampView({ ...p.v, x: p.v.x - dx, y: p.v.y - dy }));
+      setView(clampView(FULL, { ...p.v, x: p.v.x - dx, y: p.v.y - dy }));
       return;
     }
     if (mm) setMapCursor(toWorld(e));
@@ -114,7 +137,9 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
     pan.current = null;
   };
 
-  const vehicles = [...s.vehicles].sort((a) => (a.id === selected ? 1 : -1));
+  // 別の地図にいる車両は描かない（座標の意味が違うため）。地図が分からない車両は描く
+  const onMap = s.vehicles.filter((v) => !v.mapId || v.mapId === map.id);
+  const vehicles = [...onMap].sort((a) => (a.id === selected ? 1 : -1));
   const snap = mm?.type === 'goto' && mm.cursor ? nearestWp(mm.cursor) : undefined;
 
   return (
@@ -141,7 +166,7 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
         {/* ROS の地図（壁・棚 = 濃い色、未知 = 薄い色） */}
         {MAP_IMAGE && <image href={MAP_IMAGE} x={0} y={0} width={W} height={H} preserveAspectRatio="none" style={{ imageRendering: 'pixelated' }} className="dark:invert-[0.15]" />}
         {s.view.grid && (
-          <g className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={1.5}>
+          <g className="stroke-slate-200 dark:stroke-slate-800" strokeWidth={1.5 * K}>
             {GRID_X.map((k) => (
               <line key={'v' + k} x1={X(k)} y1={0} x2={X(k)} y2={H} />
             ))}
@@ -150,17 +175,17 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
             ))}
           </g>
         )}
-        <rect x={0} y={0} width={W} height={H} fill="none" className="stroke-slate-400 dark:stroke-slate-600" strokeWidth={4} />
+        <rect x={0} y={0} width={W} height={H} fill="none" className="stroke-slate-400 dark:stroke-slate-600" strokeWidth={4 * K} />
 
         {/* 地点 */}
         {WAYPOINTS.map((w) => {
           const sel = wpSel === w.name || snap?.name === w.name;
           return (
             <g key={w.name} data-wp={w.name} className={cx(!mm && 'cursor-pointer')}>
-              {sel && <circle cx={X(w.x)} cy={Y(w.y)} r={36} className="fill-blue-500/15 stroke-blue-500" strokeWidth={4} />}
-              <circle cx={X(w.x)} cy={Y(w.y)} r={15} className={cx('stroke-slate-500 dark:stroke-slate-400', w.charger ? 'fill-cyan-100' : 'fill-white dark:fill-slate-900')} strokeWidth={4} />
+              {sel && <circle cx={X(w.x)} cy={Y(w.y)} r={36 * K} className="fill-blue-500/15 stroke-blue-500" strokeWidth={4 * K} />}
+              <circle cx={X(w.x)} cy={Y(w.y)} r={15 * K} className={cx('stroke-slate-500 dark:stroke-slate-400', w.charger ? 'fill-cyan-100' : 'fill-white dark:fill-slate-900')} strokeWidth={4 * K} />
               {(s.view.labels || mapKey === 'wp') && (
-                <text x={X(w.x)} y={Y(w.y) + 46} textAnchor="middle" fontSize={24} fontWeight={600} className="fill-slate-500 dark:fill-slate-400">
+                <text x={X(w.x)} y={Y(w.y) + 46 * K} textAnchor="middle" fontSize={24 * K} fontWeight={600} className="fill-slate-500 dark:fill-slate-400">
                   {w.name}
                 </text>
               )}
@@ -171,15 +196,15 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
         {/* 予定の経路 */}
         {s.view.path &&
           mapKey !== 'wp' &&
-          s.vehicles
+          onMap
             .filter((v) => v.online && v.route.length > 1 && (!focusId || v.id === focusId))
             .map((v) => {
               const end = v.route[v.route.length - 1];
               return (
                 <g key={'p' + v.id} opacity={v.paused || v.status === 'ERROR' ? 0.45 : 1}>
-                  <polyline points={v.route.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ')} fill="none" stroke={COL.RUNNING} strokeOpacity={0.55} strokeWidth={7} strokeDasharray="16 12" strokeLinecap="round" />
-                  <circle cx={X(end.x)} cy={Y(end.y)} r={22} fill="none" stroke={COL.RUNNING} strokeWidth={5} />
-                  <circle cx={X(end.x)} cy={Y(end.y)} r={8} fill={COL.RUNNING} />
+                  <polyline points={v.route.map((p) => `${X(p.x)},${Y(p.y)}`).join(' ')} fill="none" stroke={COL.RUNNING} strokeOpacity={0.55} strokeWidth={7 * K} strokeDasharray={`${16 * K} ${12 * K}`} strokeLinecap="round" />
+                  <circle cx={X(end.x)} cy={Y(end.y)} r={22 * K} fill="none" stroke={COL.RUNNING} strokeWidth={5 * K} />
+                  <circle cx={X(end.x)} cy={Y(end.y)} r={8 * K} fill={COL.RUNNING} />
                 </g>
               );
             })}
@@ -190,7 +215,7 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
           const dim = (focusId && v.id !== focusId) || mapKey === 'wp';
           const deg = (-v.theta * 180) / Math.PI;
           return (
-            <g key={v.id} data-vid={v.id} transform={`translate(${X(v.x)} ${Y(v.y)})`} opacity={dim ? 0.35 : 1} className={cx(!mm && 'cursor-pointer')}>
+            <g key={v.id} data-vid={v.id} transform={`translate(${X(v.x)} ${Y(v.y)}) scale(${K})`} opacity={dim ? 0.35 : 1} className={cx(!mm && 'cursor-pointer')}>
               {v.status === 'ERROR' && <circle r={30} fill="none" stroke="#dc2626" strokeWidth={6} className="pulse-ring" />}
               {v.id === selected && <circle r={44} fill="none" stroke="#2563eb" strokeWidth={5} strokeDasharray="8 6" />}
               <g transform={`rotate(${deg})`}>
@@ -210,14 +235,14 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
         {/* 地図の操作モード */}
         {mm?.cursor && mm.type === 'goto' && !snap && (
           <g pointerEvents="none">
-            <circle cx={X(mm.cursor.x)} cy={Y(mm.cursor.y)} r={20} fill="none" stroke="#f59e0b" strokeWidth={5} />
-            <circle cx={X(mm.cursor.x)} cy={Y(mm.cursor.y)} r={5} fill="#f59e0b" />
+            <circle cx={X(mm.cursor.x)} cy={Y(mm.cursor.y)} r={20 * K} fill="none" stroke="#f59e0b" strokeWidth={5 * K} />
+            <circle cx={X(mm.cursor.x)} cy={Y(mm.cursor.y)} r={5 * K} fill="#f59e0b" />
           </g>
         )}
         {mm?.type === 'pose' && mm.p && (
           <g pointerEvents="none">
-            <circle cx={X(mm.p.x)} cy={Y(mm.p.y)} r={22} fill="#f59e0b33" stroke="#f59e0b" strokeWidth={5} />
-            {mm.cursor && <line x1={X(mm.p.x)} y1={Y(mm.p.y)} x2={X(mm.cursor.x)} y2={Y(mm.cursor.y)} stroke="#f59e0b" strokeWidth={7} markerEnd={`url(#arr-${mapKey})`} />}
+            <circle cx={X(mm.p.x)} cy={Y(mm.p.y)} r={22 * K} fill="#f59e0b33" stroke="#f59e0b" strokeWidth={5 * K} />
+            {mm.cursor && <line x1={X(mm.p.x)} y1={Y(mm.p.y)} x2={X(mm.cursor.x)} y2={Y(mm.cursor.y)} stroke="#f59e0b" strokeWidth={7 * K} markerEnd={`url(#arr-${mapKey})`} />}
           </g>
         )}
       </svg>

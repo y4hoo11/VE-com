@@ -2,12 +2,27 @@ import { mqttClient } from '../config/mqtt';
 import { socketService } from './socketService';
 import { prisma } from '../config/database';
 import { VehicleStatus, LogLevel } from '@prisma/client';
-import type { VehicleTelemetryExtra } from '../types';
+import type { VehicleClearancePayload, VehicleTelemetryExtra } from '../types';
 import { taskProgressService } from './taskProgressService';
 import { emergencyState } from './emergencyState';
 
-// 受信するトピック（docs/agv_protocol.md 2-2〜2-6）
-const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online'];
+// 受信するトピック（docs/agv_protocol.md 2-2〜2-7, 2-9）
+const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online', 'agv/+/clearance', 'agv/+/map'];
+
+// 使う地図（全車両共通。docs/agv_protocol.md 2-8）。設定「使用する地図の切り替え」の DB のキーと、まだ保存されていないときの地図
+export const MAP_TOPIC = 'agv/config/map';
+export const MAP_SETTING_KEY = 'map.active';
+export const DEFAULT_MAP_ID = 'demo_map';
+// 地図の名前（地図ファイルの名前）に使える文字
+export const isMapId = (v: string) => /^[A-Za-z0-9_-]{1,64}$/.test(v);
+
+// 地図の切り替えの結果（agv/{id}/map の state）→ ログの重さ
+const MAP_LOG_LEVEL: Record<string, LogLevel> = {
+  PENDING: LogLevel.INFO,
+  CHANGED: LogLevel.INFO,
+  LOCKED: LogLevel.WARN,
+  FAILED: LogLevel.ERROR,
+};
 
 // agv/{id}/path の points（[[x,y],...]）を画面の形にする。おかしな値は捨てる
 function readPath(m: Record<string, unknown>) {
@@ -19,6 +34,16 @@ function readPath(m: Record<string, unknown>) {
   const g = m.goal as { x?: unknown; y?: unknown } | undefined;
   const goal = g && typeof g.x === 'number' && typeof g.y === 'number' ? { x: g.x, y: g.y } : null;
   return { points, goal };
+}
+
+// agv/{id}/clearance（scan8・usFront [m]）を画面の形にする。数でない値は null（点なし・未接続）にする
+// scan8 が 8 個でなければ捨てる（null を返す）
+function readClearance(m: Record<string, unknown>): Omit<VehicleClearancePayload, 'id'> | null {
+  const dist = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+  if (!Array.isArray(m.scan8) || m.scan8.length !== 8) return null;
+  const out: Omit<VehicleClearancePayload, 'id'> = { scan8: m.scan8.map(dist) };
+  if ('usFront' in m) out.usFront = dist(m.usFront);
+  return out;
 }
 
 // telemetry の追加項目のうち、画面にそのまま流すもの（型が合うものだけ通す）
@@ -36,6 +61,10 @@ function pickTelemetryExtra(m: Record<string, unknown>): VehicleTelemetryExtra |
   }
   if (typeof m.esp32 === 'boolean') out.esp32 = m.esp32;
   if (typeof m.paused === 'boolean') out.paused = m.paused;
+  // 障害物までの距離（8 方向の LiDAR と、前の超音波）。数でないもの（未接続・点なし）は null にする
+  const dist = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) && x >= 0 ? x : null);
+  if (Array.isArray(m.scan8) && m.scan8.length === 8) out.scan8 = m.scan8.map(dist);
+  if ('usFront' in m) out.usFront = dist(m.usFront);
   return Object.keys(out).length ? (out as VehicleTelemetryExtra) : undefined;
 }
 
@@ -66,6 +95,11 @@ class MqttService {
     // 起動直後の接続に失敗しても、つながった時点で必ず購読される
     mqttClient.on('connect', subscribeTopics);
     if (mqttClient.connected) subscribeTopics();
+
+    // つながるたびに、使う地図を retain で出し直す（ブローカーが再起動して retain が消えていても車両に届くように）
+    const sendMap = () => void this.publishActiveMapFromDb();
+    mqttClient.on('connect', sendMap);
+    if (mqttClient.connected) sendMap();
 
     // 接続・切断を画面に知らせる（ヘッダーの「接続中 / MQTT切断」とお知らせ帯）
     let lastConnected: boolean | null = null;
@@ -132,6 +166,7 @@ class MqttService {
             currentX: updatedVehicle.currentX,
             currentY: updatedVehicle.currentY,
             currentTheta: updatedVehicle.currentTheta,
+            currentMapId: updatedVehicle.currentMapId, // 地図が切り替わったら、画面の地図も変える
             telemetry: pickTelemetryExtra(message),
           });
 
@@ -182,9 +217,34 @@ class MqttService {
         } else if (topic.endsWith('/task')) {
           // タスクの進捗（docs/agv_protocol.md 2-4）
           await taskProgressService.handle(agvId, message);
+        } else if (topic.endsWith('/clearance')) {
+          // LiDAR で見えている物の 8 方向の距離（2-7）。DB には保存せず、画面に流すだけ
+          const c = readClearance(message);
+          if (c) socketService.broadcastVehicleClearance({ id: agvId, ...c });
         } else if (topic.endsWith('/path')) {
           // Nav2 が計画した経路（2-5）。DB には保存せず、画面に流すだけ
           socketService.broadcastVehiclePath({ id: agvId, ...readPath(message) });
+        } else if (topic.endsWith('/map')) {
+          // 地図の切り替えの結果（2-8）。車両のログに残す（画面のログ・お知らせにも出る）
+          const state = typeof message.state === 'string' ? message.state : '';
+          const level = MAP_LOG_LEVEL[state];
+          if (!level) return;
+          const exists = await prisma.vehicle.findUnique({ where: { id: agvId }, select: { id: true } });
+          if (!exists) return; // まだ DB に無い車両はログを残せない
+          const reason = typeof message.reason === 'string' && message.reason ? message.reason : `地図 ${message.mapId ?? ''}: ${state}`;
+          // details に state などを残す（画面はこれで、お知らせを出すかを決める）
+          const details = { kind: 'MAP', ...message };
+          const log = await prisma.vehicleLog.create({
+            data: { vehicleId: agvId, logLevel: level, message: `地図: ${reason}`, details },
+          });
+          socketService.broadcastLog({
+            id: log.id.toString(),
+            vehicleId: agvId,
+            level,
+            message: log.message,
+            details,
+            timestamp: log.timestamp.toISOString(),
+          });
         } else if (topic.endsWith('/online')) {
           // PC1 の接続状態（2-6）。切れたとき（遺言）は、5秒待たずにすぐオフラインにする。
           // つながったときは何もしない（telemetry が届いた時点でオンラインに戻る）
@@ -208,6 +268,26 @@ class MqttService {
     const topic = `agv/${agvId}/command`;
     mqttClient.publish(topic, JSON.stringify(command));
     console.log(`[MQTT送信] ${topic}:`, command);
+  }
+
+  /** 使う地図を全車両に知らせる（retain。あとから起動した車両も、つないだ時点で受け取る） */
+  publishActiveMap(mapId: string) {
+    if (!isMapId(mapId)) {
+      console.error(`[MQTT] 地図の名前が正しくないので送りません: ${mapId}`);
+      return;
+    }
+    mqttClient.publish(MAP_TOPIC, JSON.stringify({ mapId }), { qos: 1, retain: true });
+    console.log(`[MQTT送信] ${MAP_TOPIC}: ${mapId}（retain）`);
+  }
+
+  /** DB の設定（無ければ既定の地図）を送る */
+  async publishActiveMapFromDb() {
+    try {
+      const row = await prisma.systemSetting.findUnique({ where: { key: MAP_SETTING_KEY } });
+      this.publishActiveMap(row?.value || DEFAULT_MAP_ID);
+    } catch (e) {
+      console.error('[MQTT] 使う地図を読めませんでした:', e);
+    }
   }
 
   // MQTTブローカーにつながっているか
