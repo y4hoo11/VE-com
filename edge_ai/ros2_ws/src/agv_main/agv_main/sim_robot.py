@@ -10,6 +10,9 @@ Gazebo（TurtleBot3）より軽く、TT-02 と同じ「その場で回れない�
 追加で出すもの:
   scan          sensor_msgs/LaserScan  仮想 LiDAR（frame: laser）
   sim/truth     geometry_msgs/PoseStamped  本当の位置（map 座標）。自己位置推定のずれの確認用
+購読:
+  sim/set_map   std_msgs/String(JSON)  mission_manager が地図を切り替えたとき {"mapId","path","start":[x,y,度]}
+                                       → 仮想の世界の地図を差し替えて、車を start に置き直す
 """
 from __future__ import annotations
 
@@ -21,7 +24,7 @@ from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
 
 from .robot_node_base import RobotBridgeBase
-from .ros_utils import SENSOR, json_msg, set_quat
+from .ros_utils import LATCHED, SENSOR, json_msg, parse_json, set_quat
 from .sim_world import SimEsp32, SimWorld
 
 SIM_DEFAULTS = {
@@ -66,6 +69,19 @@ class SimRobot(RobotBridgeBase):
         if bool(sc["publish_truth"]):
             self.create_timer(0.1, self._truth_tick)
         self.create_timer(1.0, self._sim_status_tick)
+        self.create_subscription(String, "sim/set_map", self._on_set_map, LATCHED)
+
+    def _on_set_map(self, msg: String) -> None:
+        d = parse_json(msg)
+        path, start = str(d.get("path") or ""), d.get("start")
+        if not path or not isinstance(start, list) or len(start) < 3:
+            return
+        try:
+            self.world.set_map(path, [float(v) for v in start[:3]])
+        except Exception as e:
+            self.get_logger().error(f"シミュレーター: 地図 {path} を読めません: {e}")
+            return
+        self.get_logger().info(f"シミュレーター: 地図を {d.get('mapId')} に切り替え、車を {start[:3]} に置き直しました")
 
     def make_esp(self):
         sc = self.cfg["sim"]

@@ -62,6 +62,7 @@ PC1 の `mqtt_bridge` が受け取り、ROS の `agv/command` として `mission
 | 現在地を手動設定 | `{"action":"SET_POSE","x":-4.0,"y":-4.0,"theta":0.0}` | PC1 |
 | 荷積み/荷降ろし完了 | `{"action":"CONFIRM"}`（`wait_mode: confirm` のとき） | PC1 |
 | 手動操縦（追加） | `{"action":"MANUAL_DRIVE","linear":0.2,"angular":0.0}` | PC1 |
+| 地図の切り替え（追加） | `{"action":"SET_MAP","mapId":"warehouse_a"}`（ふつうは 2-7 の全車両向けを使う。1台だけ試すとき用） | PC1 |
 
 `startLocation` / `targetLocation` は `edge_ai/ros2_ws/src/agv_navigation/config/waypoints.yaml` の名前（または別名）。
 `"1.5,-2.0"` のような「x,y」文字列も使えます。
@@ -178,6 +179,49 @@ PC1 の `mqtt_bridge` が接続時に `{"online":true}` を retain で出す。�
 一覧は `edge_ai/README.md` の 5章。
 
 マーカー解析つきのカメラ映像は `http://<PC1>:5000/video`（MJPEG）。Web では `<img src=…>` で表示できる。
+
+### 2-7. PC2 → 全車両: `agv/config/map`（追加。retain）
+
+使う地図（全車両共通）。Web の設定「使用する地図の切り替え」（DB の `system_settings` の `map.active`）が正本。
+
+```json
+{"mapId":"warehouse_a"}
+```
+
+- backend が **retain** で出す。出すのは「設定の変更が適用されたとき」と「MQTT につながったとき」。
+  retain なので、あとから起動した車両もつないだ時点で受け取る
+- PC1 の `mqtt_bridge` が受け取り、ROS の `agv/map_config`（ラッチ）で `mission_manager` に渡す（中身は SET_MAP と同じ扱い）
+- `mapId` は地図ファイルの名前（`agv_navigation/maps/<mapId>.yaml`）。地点は `config/waypoints/<mapId>.yaml`（無ければ共通の `waypoints.yaml`）
+
+PC1（mission_manager）の動き:
+
+| 状況 | 動き | 2-8 の `state` |
+|---|---|---|
+| すでにその地図 | 何もしない | （送らない） |
+| 起動時に `map:=` を指定した（開発用） | 切り替えない（`map:=` が優先） | `LOCKED` |
+| タスク中・待ち行列あり・手動操縦中・走行中 | 止まるまで待ってから切り替える | `PENDING` → `CHANGED` |
+| 地図ファイルが無い・Nav2 が読めない | 切り替えない（元の地図のまま） | `FAILED` |
+| 止まっている | Nav2 の地図を読み直し（`/map_server/load_map`）、地点を入れ替え、新しい地図の `Home` に現在地を設定 | `CHANGED` |
+
+- 切り替え後の現在地は新しい地図の `Home`（`localization.initial_pose`）。実機では、車両を `Home` に置いてから切り替えること。
+  置いた場所が違うときは Web から「現在地を設定（SET_POSE）」する
+- シミュレーターでは、仮想の世界の地図も切り替わり、車は `Home` に置き直される
+- telemetry（2-2）の `mapId` も新しい地図になる。Web はこれを見て表示する地図を変える
+
+### 2-8. PC1 → PC2: `agv/{id}/map`（追加）
+
+地図の切り替えの結果。emergency（2-3）とは別のトピックにしてある（車両を ERROR にしないため）。
+
+```json
+{"state":"CHANGED","mapId":"warehouse_a","from":"demo_map","reason":"地図を warehouse_a に切り替えました"}
+```
+
+| state | 意味 | backend のログ |
+|---|---|---|
+| `PENDING` | 動いているので、止まるまで待っている | INFO |
+| `CHANGED` | 切り替えた | INFO |
+| `LOCKED` | 起動時に `map:=` を指定しているので切り替えない | WARN |
+| `FAILED` | 切り替えられなかった（`reason` に理由） | ERROR |
 
 ---
 

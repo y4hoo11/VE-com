@@ -616,7 +616,15 @@ function listen() {
     if (S.logs.some((x) => x.id === l.id)) return;
     S.logs.unshift(l);
     if (S.logs.length > 500) S.logs.length = 500;
-    if (l.level === 'ERROR' && l.vid) {
+    // 地図の切り替えの結果（backend が details.kind = 'MAP' で残す）。
+    // 切り替わった（CHANGED）ことは vehicle:update の地図の変化でお知らせを出すので、ここでは待ち・失敗などだけ出す。音は鳴らさない
+    const mapState = l.details?.kind === 'MAP' ? String(l.details.state ?? '') : null;
+    if (mapState !== null) {
+      if (l.vid && mapState !== 'CHANGED') {
+        const v = veh(l.vid);
+        S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
+      }
+    } else if (l.level === 'ERROR' && l.vid) {
       const v = veh(l.vid);
       S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
       if (S.sound) playAlarm();

@@ -3,6 +3,7 @@
     ros2 launch agv_navigation sim.launch.py
     ros2 launch agv_navigation sim.launch.py obstacles:="-2.0,-3.0,0.25"     # 地図に無い障害物を置く
     ros2 launch agv_navigation sim.launch.py use_mqtt:=false                 # Web につながない
+    ros2 launch agv_navigation sim.launch.py map:=/path/to/warehouse_a.yaml  # 地図を決めて起動（Web からの切り替えは受けない）
 
 起動するもの:
   sim_robot（agv_main）… 仮想の TT-02・ESP32・LiDAR（serial_bridge と同じ判断部を使う）
@@ -23,9 +24,9 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     nav_share = get_package_share_directory("agv_navigation")
     main_share = get_package_share_directory("agv_main")
-    map_default = os.path.join(nav_share, "maps", "demo_map.yaml")
     return LaunchDescription([
-        DeclareLaunchArgument("map", default_value=map_default),
+        # 空なら demo_map で起動し、Web の設定の地図に切り替わる（シミュレーターの世界も一緒に切り替わる）
+        DeclareLaunchArgument("map", default_value="", description="地図の yaml（指定するとその地図のまま）"),
         DeclareLaunchArgument("obstacles", default_value="", description='地図に無い障害物 "x,y,半径; ..."'),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         DeclareLaunchArgument("use_mqtt", default_value="true"),

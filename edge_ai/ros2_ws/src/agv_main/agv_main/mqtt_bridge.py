@@ -6,10 +6,12 @@ MQTT のトピックと JSON の形は前と同じ（docs/agv_protocol.md の 2-
     agv/{id}/command ───────────────►  agv/command (String JSON) → mission_manager
        EMERGENCY_STOP / CLEAR ──────►  emergency_stop (Bool, ラッチ) → serial_bridge（ラズパイ）
     agv/broadcast/stop ─────────────►  emergency_stop = true
+    agv/config/map（retain）────────►  agv/map_config (String JSON, ラッチ) → mission_manager（使う地図。全車両共通）
     agv/{id}/telemetry ◄────────────── agv/state (mission_manager, 2Hz) + agv/robot_info (ラズパイ, 1Hz)
     agv/{id}/task      ◄────────────── agv/task_status (mission_manager)
     agv/{id}/emergency ◄────────────── agv/events (ラズパイ) + agv/mission_events (mission_manager)
     agv/{id}/path      ◄────────────── plan (nav_msgs/Path, Nav2 の経路) を間引いたもの
+    agv/{id}/map       ◄────────────── agv/map_status (mission_manager)  地図の切り替えの結果
     agv/{id}/online    ◄────────────── このノードの接続状態（retain + 遺言 LWT）
 
 paho-mqtt は Dockerfile で python3-paho-mqtt を入れてある（1.x / 2.x どちらでも動く）。
@@ -27,6 +29,8 @@ from rclpy.node import Node
 from std_msgs.msg import Bool, String
 
 from .ros_utils import EVENTS, LATCHED, declare_tree, json_msg, parse_json
+
+MAP_TOPIC = "agv/config/map"   # docs/agv_protocol.md 2-7
 
 DEFAULTS = {
     "agv_id": "AGV-01",
@@ -59,11 +63,14 @@ class MqttBridge(Node):
 
         self.pub_cmd = self.create_publisher(String, "agv/command", EVENTS)
         self.pub_estop = self.create_publisher(Bool, "emergency_stop", LATCHED)
+        # 使う地図はラッチで出す（MQTT の retain は接続直後に届くので、まだ mission_manager が見つかっていないことがある）
+        self.pub_map = self.create_publisher(String, "agv/map_config", LATCHED)
         self.create_subscription(String, "agv/state", lambda m: self._forward("telemetry", m), 10)
         self.create_subscription(String, "agv/robot_info", lambda m: self._forward("telemetry", m), 10)
         self.create_subscription(String, "agv/task_status", lambda m: self._forward("task", m, qos=1), EVENTS)
         self.create_subscription(String, "agv/events", lambda m: self._forward("emergency", m, qos=1), EVENTS)
         self.create_subscription(String, "agv/mission_events", lambda m: self._forward("emergency", m, qos=1), EVENTS)
+        self.create_subscription(String, "agv/map_status", lambda m: self._forward("map", m, qos=1), EVENTS)
         self.create_subscription(Path, "plan", self._on_plan, 1)
 
         cid = str(mc["client_id"]) or f"ros_bridge_{self.id}"
@@ -94,6 +101,7 @@ class MqttBridge(Node):
             return
         client.subscribe(f"{self.prefix}/command", 1)
         client.subscribe("agv/broadcast/stop", 1)
+        client.subscribe(MAP_TOPIC, 1)
         self.connected.set()
         self.mqtt_pub("online", {"online": True}, qos=1, retain=True)
         self.get_logger().info("MQTT 接続成功")
@@ -113,6 +121,11 @@ class MqttBridge(Node):
         self.handle_command(msg.topic, payload)
 
     def handle_command(self, topic: str, payload: dict) -> None:
+        if topic == MAP_TOPIC:   # 使う地図（全車両共通・retain）
+            if payload.get("mapId"):
+                self.get_logger().info(f"使う地図: {payload['mapId']}")
+                self.pub_map.publish(json_msg({"mapId": str(payload["mapId"])}))
+            return
         action = payload.get("action")
         if topic.endswith("broadcast/stop") or action == "EMERGENCY_STOP":
             self.get_logger().warn("緊急停止を受信")
