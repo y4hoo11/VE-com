@@ -1,0 +1,48 @@
+# =====================================================================
+#  地点（ウェイポイント）一覧  ※座標は maps/warehouse_a.yaml（= Nav2 の map 座標） [m]
+#  【仮】地図の通れる場所から仮に置いた位置。実際に使う前に測り直してください
+#  （ros2 run agv_navigation check_waypoints --map maps/warehouse_a.yaml で確認できます）
+# =====================================================================
+waypoints:
+  - name: "Home"
+    x: -10.12
+    y: -4.28
+    theta_deg: 0
+    charger: true
+    aliases: ["home", "充電ステーション"]
+
+  - name: "Dock-A"
+    x: -11.93
+    y: 20.47
+    theta_deg: 90
+    aliases: ["DockA", "入荷口A"]
+
+  - name: "Dock-B"
+    x: -12.53
+    y: 9.97
+    theta_deg: 0
+    aliases: ["DockB", "入荷口B"]
+
+  - name: "A13"
+    x: 3.07
+    y: 9.97
+    theta_deg: 0
+    aliases: ["棚A13"]
+
+  - name: "Station-1"
+    x: 20.02
+    y: 21.97
+    theta_deg: 90
+    aliases: ["Station1", "1", "部屋"]
+
+  - name: "Station-2"
+    x: 5.02
+    y: -3.98
+    theta_deg: 90
+    aliases: ["Station2", "2"]
+
+  - name: "Station-3"
+    x: 27.98
+    y: 10.57
+    theta_deg: 90
+    aliases: ["Station3", "3"]

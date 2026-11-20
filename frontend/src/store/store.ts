@@ -8,6 +8,7 @@ import { isAxiosError } from 'axios';
 import { api } from '../services/api';
 import { emitWithAck, socket } from '../services/socket';
 import { demoOn, resetDemo, setDemoEnabled, setDemoUser } from '../services/demo'; // 【仮】デモモード
+import { DEFAULT_MAP_ID, hasMap, setActiveMap } from './map';
 import {
   approvalsOf,
   ERR,
@@ -119,6 +120,7 @@ interface VehicleUpdate {
   emergencyReason?: string | null;
   emergencyCode?: string | null;
   emergencySource?: string | null;
+  currentMapId?: string | null;
   cameraUrl?: string | null; // 車両の設定でカメラの URL が変わったとき
   camera2Url?: string | null;
   telemetry?: {
@@ -189,6 +191,7 @@ export const S = {
   modal: null as ModalState,
   popover: null as PopoverState,
   mapMode: null as MapMode,
+  mapPick: null as string | null, // 画面で選んだ地図（運行モニター・地図の画面の切り替え）
   view: { grid: false, path: true, labels: true, ...prefs.view },
   theme: (prefs.theme ?? 'light') as 'light' | 'dark',
   sound: prefs.sound ?? true,
@@ -209,7 +212,28 @@ const subscribe = (f: () => void) => {
     listeners.delete(f);
   };
 };
+// 表示する地図：地図で指定中の車両 → 車両詳細のページの車両 → 開いている車両 → 画面で選んだ地図 → 最初の車両 → demo_map
+export function wantedMapId(): string {
+  const pageVid = window.location.hash.match(/^#\/vehicles\/([^/?]+)/)?.[1];
+  const ids = [
+    S.mapMode && veh(S.mapMode.vid)?.mapId,
+    pageVid && veh(decodeURIComponent(pageVid))?.mapId,
+    S.drawer?.type === 'vehicle' ? veh(S.drawer.id)?.mapId : null,
+    S.mapPick,
+    S.vehicles.find((v) => hasMap(v.mapId))?.mapId,
+  ];
+  return ids.find(hasMap) ?? DEFAULT_MAP_ID;
+}
+
+/** 地図を選ぶ（運行モニター・地図の画面）。開いている車両が別の地図なら、ドロワーは閉じる */
+export function pickMap(id: string) {
+  S.mapPick = id;
+  if (S.drawer?.type === 'vehicle' && veh(S.drawer.id)?.mapId !== id) S.drawer = null;
+  emit();
+}
+
 export function emit() {
+  setActiveMap(wantedMapId());
   version++;
   listeners.forEach((f) => f());
 }
@@ -319,6 +343,7 @@ function toVehicle(a: ApiVehicle, prev?: Vehicle): Vehicle {
     usFront: prev?.usFront ?? null,
     sensorAt: prev?.sensorAt ?? 0,
     online: a.status !== 'OFFLINE',
+    mapId: a.currentMapId ?? prev?.mapId ?? null,
     paused: false,
     wait: 0,
     taskId: null,
@@ -539,6 +564,11 @@ function listen() {
     if (u.cameraUrl !== undefined) v.camera = u.cameraUrl ?? '';
     if (u.camera2Url !== undefined) v.camera2 = u.camera2Url ?? '';
     if (u.batteryLevel !== undefined) v.battery = u.batteryLevel;
+    if (u.currentMapId && u.currentMapId !== v.mapId) {
+      // 別の地図に変わったら通知する（最初に分かったときは通知しない）
+      if (v.mapId) S.notes.unshift({ id: S.seq.note++, vid: v.id, text: `${v.name}: 地図が ${v.mapId} から ${u.currentMapId} に変わりました`, at: now(), read: false });
+      v.mapId = u.currentMapId;
+    }
     if (u.currentX != null) v.x = u.currentX;
     if (u.currentY != null) v.y = u.currentY;
     if (u.currentTheta != null) v.theta = u.currentTheta;
@@ -601,7 +631,15 @@ function listen() {
     if (S.logs.some((x) => x.id === l.id)) return;
     S.logs.unshift(l);
     if (S.logs.length > 500) S.logs.length = 500;
-    if (l.level === 'ERROR' && l.vid) {
+    // 地図の切り替えの結果（backend が details.kind = 'MAP' で残す）。
+    // 切り替わった（CHANGED）ことは vehicle:update の地図の変化でお知らせを出すので、ここでは待ち・失敗などだけ出す。音は鳴らさない
+    const mapState = l.details?.kind === 'MAP' ? String(l.details.state ?? '') : null;
+    if (mapState !== null) {
+      if (l.vid && mapState !== 'CHANGED') {
+        const v = veh(l.vid);
+        S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
+      }
+    } else if (l.level === 'ERROR' && l.vid) {
       const v = veh(l.vid);
       S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
       if (S.sound) playAlarm();

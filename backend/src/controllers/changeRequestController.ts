@@ -6,6 +6,7 @@ import { Request, Response } from 'express';
 import { ChangeRequestStatus, Prisma, ReviewDecision, Role, SettingCategory } from '@prisma/client';
 import { prisma } from '../config/database';
 import { socketService } from '../services/socketService';
+import { DEFAULT_MAP_ID, isMapId, MAP_SETTING_KEY, mqttService } from '../services/mqttService';
 import { loadOpsSettings } from './settingsController';
 
 type Item = {
@@ -26,7 +27,8 @@ export const SETTING_ITEMS: Record<string, Item> = {
   maxSpeed: { label: '最高速度', rank: 3, dbKey: 'agv.max_speed_kmh', def: '5', num: { min: 1, max: 6 } }, // km/h（以前の agv.max_speed は m/s なので使わない）
   obstacle: { label: '障害物検知で減速・停止を始める距離', rank: 3, dbKey: 'agv.obstacle_distance', def: '0.45', num: { min: 0.2, max: 2 } },
   keepout: { label: '立入禁止エリアの追加・削除', rank: 3, dbKey: 'map.keepout_zones', def: '未設定' },
-  map: { label: '使用する地図の切り替え', rank: 3, dbKey: 'map.active', def: 'warehouse_map' },
+  // 変更すると全車両の地図が切り替わる（mqttService.publishActiveMap。車両は止まってから切り替える）
+  map: { label: '使用する地図の切り替え', rank: 2, dbKey: MAP_SETTING_KEY, def: DEFAULT_MAP_ID },
 };
 
 // 必要な承認の人数（申請者以外の管理者）
@@ -48,6 +50,7 @@ async function checkValue(key: string, raw: string): Promise<string | null> {
   const item = SETTING_ITEMS[key];
   if (!raw) return '希望する値を入力してください';
   if (raw.length > 500) return '内容が長すぎます（500文字まで）';
+  if (key === 'map' && !isMapId(raw)) return '地図の名前は英数字・「_」「-」で入力してください（例: warehouse_a）';
   if (!item.num) return null;
   const n = Number(raw);
   if (!Number.isFinite(n) || (item.num.int && !Number.isInteger(n))) return `${item.label}は${item.num.int ? '整数' : '数値'}で入力してください`;
@@ -253,6 +256,7 @@ export const applyChangeRequest = async (req: Request, res: Response) => {
     });
     await broadcastSettings();
     socketService.broadcastChangeRequestsChanged();
+    if (r.settingKey === 'map') mqttService.publishActiveMap(r.requestedValue); // 全車両の地図を切り替える
     res.json(toJson((await findRequest(id))!));
   } catch (e) {
     console.error('設定の変更エラー:', e);
@@ -306,6 +310,7 @@ export const directChange = async (req: Request, res: Response) => {
     });
     await broadcastSettings();
     socketService.broadcastChangeRequestsChanged();
+    if (key === 'map') mqttService.publishActiveMap(value); // 全車両の地図を切り替える
     res.status(201).json(toJson(created));
   } catch (e) {
     console.error('設定の直接変更エラー:', e);

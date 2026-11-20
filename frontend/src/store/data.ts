@@ -2,6 +2,8 @@
 // 型・状態名は backend/prisma/schema.prisma と docs/agv_protocol.md に合わせてある。
 // バックエンドから届くデータは store.ts でこの形に変換する。
 
+import { DEFAULT_MAP_ID, MAP_IDS } from './map';
+
 export type VStatus = 'IDLE' | 'RUNNING' | 'CHARGING' | 'ERROR' | 'OFFLINE';
 export type TStatus = 'PENDING' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'FAILED';
 export type Level = 'INFO' | 'WARN' | 'ERROR';
@@ -52,6 +54,7 @@ export interface Vehicle {
   usFront: number | null;
   sensorAt: number;
   online: boolean;
+  mapId: string | null; // 車両が使っている地図（telemetry の mapId）
   paused: boolean;
   wait: number; // 荷積み・荷降ろしの残り秒
   taskId: string | null;
@@ -122,7 +125,7 @@ export interface User {
 // ---------------------------------------------------------------
 // 地図・地点は map.ts（ROS 側の地図と waypoints.yaml を読み込む）。ここからも使えるように出しておく
 // ---------------------------------------------------------------
-export { isFree, planRoute, scan8At, WAYPOINTS, wpByName } from './map';
+export { isFree, MAP_IDS, planRoute, scan8At, WAYPOINTS, wpByName } from './map';
 
 export const pathLen = (pts: Pt[]) =>
   pts.slice(1).reduce((s, b, i) => s + Math.hypot(b.x - pts[i].x, b.y - pts[i].y), 0);
@@ -216,7 +219,8 @@ export const SETTING_ITEMS: SettingItem[] = [
   { key: 'maxSpeed', label: '最高速度', rank: 3, scope: '全車両', def: '5', type: 'number', unit: 'km/h', min: 1, max: 6, step: 0.5, hardLimit: true },
   { key: 'obstacle', label: '障害物検知で減速・停止を始める距離', rank: 3, scope: '全車両', def: '0.45', type: 'number', unit: 'm', min: 0.2, max: 2, step: 0.05 },
   { key: 'keepout', label: '立入禁止エリアの追加・削除', rank: 3, scope: '全車両', def: '未設定', type: 'text', placeholder: '追加・削除するエリアと、その範囲' },
-  { key: 'map', label: '使用する地図の切り替え', rank: 3, scope: '全車両', def: 'warehouse_map', type: 'select', options: ['warehouse_map', 'warehouse_a', 'warehouse_b', 'demo_map', 'simple', 'maze'] },
+  // 変更が適用されると全車両の地図が切り替わる（走行中の車両は止まってから。docs/agv_protocol.md 2-8）
+  { key: 'map', label: '使用する地図の切り替え', rank: 2, scope: '全車両', def: DEFAULT_MAP_ID, type: 'select', options: MAP_IDS },
 ];
 export const settingItem = (key: string) => SETTING_ITEMS.find((i) => i.key === key);
 export const fmtSetting = (key: string, v: string | null | undefined) => {

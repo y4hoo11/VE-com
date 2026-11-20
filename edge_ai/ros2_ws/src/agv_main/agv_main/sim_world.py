@@ -100,6 +100,16 @@ class SimWorld:
         self.rng = np.random.default_rng(seed)
         self.lock = threading.Lock()
 
+    def set_map(self, map_yaml: str, start) -> None:
+        """地図を差し替えて、車を start [x, y, 向き(度)] に置き直す（地図の切り替え）。障害物は前の地図のものなので消す"""
+        new_map = SimMap(map_yaml)
+        with self.lock:
+            self.map = new_map
+            self.x, self.y, self.th = float(start[0]), float(start[1]), math.radians(float(start[2]))
+            self.v = 0.0
+            self.obstacles = []
+            self.collided = False
+
     def set_command(self, steer: float, thr: float) -> None:
         with self.lock:
             self.cmd_steer, self.cmd_thr = steer, thr

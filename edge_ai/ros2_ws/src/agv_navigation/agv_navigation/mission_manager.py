@@ -5,6 +5,7 @@
 
 購読:
   agv/command       String(JSON)   mqtt_bridge が Web から受けたコマンド
+  agv/map_config    String(JSON)   使う地図 {"mapId"}（ラッチ。mqtt_bridge が agv/config/map から）
   emergency_stop    Bool           緊急停止の状態（ラッチ）
   agv/safety        String(JSON)   ラズパイの安全ガードの状態
   amcl_pose         PoseWithCovarianceStamped  AMCL の推定（確からしさに使う）
@@ -14,10 +15,13 @@
   agv/state         String(JSON)   Web 向けの状態（mqtt_bridge が agv/{id}/telemetry へ）2Hz
   agv/task_status   String(JSON)   タスクの進み具合（→ agv/{id}/task）
   agv/mission_events String(JSON)  LOCALIZATION_LOST / BLOCKED（→ agv/{id}/emergency）
-  initialpose       PoseWithCovarianceStamped  起動時・SET_POSE で AMCL に現在地を教える
+  initialpose       PoseWithCovarianceStamped  起動時・SET_POSE・地図の切り替えで AMCL に現在地を教える
   cmd_vel           Twist          手動操縦（MANUAL_DRIVE）のときだけ。タスクが無いとき = Nav2 が出していないとき
-アクション:
+  agv/map_status    String(JSON)   地図の切り替えの結果（→ agv/{id}/map。docs/agv_protocol.md 2-9）
+  sim/set_map       String(JSON)   シミュレーターの世界の地図も切り替える（sim_robot。実機では誰も受けない）
+アクション / サービス:
   navigate_to_pose（Nav2）
+  map_server/load_map（Nav2）     地図の切り替え（SET_MAP）で地図を読み直す
 """
 from __future__ import annotations
 
@@ -33,6 +37,7 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.time import Time
 from std_msgs.msg import Bool, String
+from nav2_msgs.srv import ClearEntireCostmap, LoadMap
 from std_srvs.srv import Empty
 from tf2_ros import Buffer, TransformListener
 
@@ -44,8 +49,10 @@ from agv_main.ros_utils import EVENTS, LATCHED, declare_tree, json_msg, parse_js
 
 DEFAULTS = {
     "agv_id": "AGV-01",
-    "map_id": "demo_map",
-    "waypoints_file": "",                     # 空なら agv_navigation/config/waypoints.yaml
+    "map_id": "demo_map",                     # 起動ファイルが map:= のファイル名で上書きする
+    "map_locked": False,                      # 起動時に map:= を指定した（開発用）→ Web からの地図の切り替え（SET_MAP）を受けない
+    "maps_dir": "",                           # 切り替え先の地図 <maps_dir>/<mapId>.yaml。空なら agv_navigation の maps
+    "waypoints_file": "",                     # 空なら config/waypoints/<map_id>.yaml、無ければ config/waypoints.yaml
     "frames": {"map": "map", "base": "base_link"},
     "behavior_tree": "",                      # 空なら bt_navigator の既定（nav2_params.yaml）
     "tasks": {
@@ -92,9 +99,10 @@ class MissionManager(Node):
         super().__init__("mission_manager")
         self.cfg = declare_tree(self, DEFAULTS)
         self.id = str(os.environ.get("AGV_ID") or self.cfg["agv_id"])
-        wp_path = str(self.cfg["waypoints_file"]) or self._share_file("config", "waypoints.yaml")
+        self.map_id = str(self.cfg["map_id"])
+        wp_path = str(self.cfg["waypoints_file"]) or self._waypoints_file(self.map_id)
         self.waypoints = WaypointBook(wp_path)
-        self.get_logger().info(f"地点 {len(self.waypoints.items)} 件: {wp_path}")
+        self.get_logger().info(f"地図 {self.map_id} ・ 地点 {len(self.waypoints.items)} 件: {wp_path}")
         fr = self.cfg["frames"]
         self.map_frame, self.base_frame = str(fr["map"]), str(fr["base"])
 
@@ -107,6 +115,11 @@ class MissionManager(Node):
         self.pub_initial = self.create_publisher(PoseWithCovarianceStamped, "initialpose", 10)
         self.global_loc = self.create_client(Empty, "reinitialize_global_localization")
         self.pub_cmd_vel = self.create_publisher(Twist, "cmd_vel", 10)
+        self.pub_map_status = self.create_publisher(String, "agv/map_status", EVENTS)
+        self.pub_sim_map = self.create_publisher(String, "sim/set_map", LATCHED)
+        self.load_map_cli = self.create_client(LoadMap, "map_server/load_map")
+        self.clear_costmap_cli = [self.create_client(ClearEntireCostmap, n) for n in (
+            "global_costmap/clear_entirely_global_costmap", "local_costmap/clear_entirely_local_costmap")]
 
         self.logic = MissionLogic(self.cfg, self.waypoints, self.nav,
                                   publish_task=lambda d: self.pub_task.publish(json_msg(d)),
@@ -115,6 +128,7 @@ class MissionManager(Node):
                                   publish_cmd=self._publish_cmd_vel)
 
         self.create_subscription(String, "agv/command", self._on_command, EVENTS)
+        self.create_subscription(String, "agv/map_config", lambda m: self.request_map(str(parse_json(m).get("mapId") or "")), LATCHED)
         self.create_subscription(Bool, "emergency_stop", self._on_estop, LATCHED)
         self.create_subscription(String, "agv/safety", self._on_safety, LATCHED)
         self.create_subscription(PoseWithCovarianceStamped, "amcl_pose", self._on_amcl, 10)
@@ -131,6 +145,14 @@ class MissionManager(Node):
         self._lost_reported = False
         self._t_state = 0.0
         self._t_save = 0.0
+        # 地図の切り替え（SET_MAP）
+        self.map_locked = bool(self.cfg["map_locked"])
+        self._map_want: str | None = None     # 切り替え待ちの地図
+        self._map_want_since = 0.0
+        self._map_loading = False             # Nav2 の返事待ち
+        self._map_pending_said = False
+        self._map_locked_said: str | None = None
+        self._repose: list[float] = []        # 切り替え後に現在地を送り直す時刻
 
         lc = self.cfg["localization"]
         self.state_file = Path(os.path.expanduser(str(lc["state_dir"]))) / f"{self.id}.json"
@@ -142,6 +164,11 @@ class MissionManager(Node):
         self._initial_tries = 0
         self.create_timer(1.0, self._send_initial_pose_until_amcl)
         self.create_timer(0.1, self._tick)
+
+    def _waypoints_file(self, map_id: str) -> str:
+        """地図ごとの地点ファイル。その地図用が無ければ、共通の config/waypoints.yaml"""
+        per_map = self._share_file("config", "waypoints", f"{map_id}.yaml")
+        return per_map if os.path.isfile(per_map) else self._share_file("config", "waypoints.yaml")
 
     def _share_file(self, *parts) -> str:
         try:
@@ -169,6 +196,9 @@ class MissionManager(Node):
             return
         if d.get("action") != "MANUAL_DRIVE":   # 手動操縦は 0.2 秒ごとに届くのでログに出さない
             self.get_logger().info(f"コマンド: {json.dumps(d, ensure_ascii=False)}")
+        if d.get("action") == "SET_MAP":
+            self.request_map(str(d.get("mapId") or ""))
+            return
         if d.get("action") == "EMERGENCY_STOP":
             self.estop_cmd = True
         elif d.get("action") == "CLEAR_EMERGENCY":
@@ -251,6 +281,10 @@ class MissionManager(Node):
             data = json.loads(self.state_file.read_text(encoding="utf-8"))
             if time.time() - float(data["time"]) > max_age:
                 return None
+            # 別の地図で保存した位置は使わない（座標の意味が違うため）。地図名の無い古い保存は demo_map とみなす
+            if str(data.get("mapId", "demo_map")) != self.map_id:
+                self.get_logger().info(f"前回の位置は地図 {data.get('mapId', 'demo_map')} のものなので使いません")
+                return None
             return Pose2D(float(data["x"]), float(data["y"]), float(data["theta"]))
         except Exception:
             return None
@@ -262,7 +296,7 @@ class MissionManager(Node):
         try:
             self.state_file.parent.mkdir(parents=True, exist_ok=True)
             tmp = self.state_file.with_suffix(".tmp")
-            tmp.write_text(json.dumps({**pose.to_dict(), "time": now}), encoding="utf-8")
+            tmp.write_text(json.dumps({**pose.to_dict(), "mapId": self.map_id, "time": now}), encoding="utf-8")
             tmp.replace(self.state_file)
         except Exception as e:
             self.get_logger().debug(f"位置の保存に失敗: {e}")
@@ -288,6 +322,125 @@ class MissionManager(Node):
                 self._lost_reported = False
 
     # ------------------------------------------------------------------
+    #  地図の切り替え（SET_MAP。docs/agv_protocol.md 2-8, 2-9）
+    # ------------------------------------------------------------------
+    def _map_status(self, state: str, map_id: str, reason: str) -> None:
+        d = {"state": state, "mapId": map_id, "from": self.map_id, "reason": reason}
+        # rclpy は「同じ行から違う重さのログ」を出すと例外になるので、行を分ける
+        if state in ("FAILED", "LOCKED"):
+            self.get_logger().warn(f"地図: {state} {reason}")
+        else:
+            self.get_logger().info(f"地図: {state} {reason}")
+        self.pub_map_status.publish(json_msg(d))
+
+    def _map_file(self, map_id: str) -> str:
+        d = str(self.cfg["maps_dir"])
+        return os.path.join(os.path.expanduser(d), f"{map_id}.yaml") if d else self._share_file("maps", f"{map_id}.yaml")
+
+    def request_map(self, map_id: str) -> None:
+        """Web から「この地図を使う」が届いた。止まっていればすぐ、動いていれば止まってから切り替える"""
+        map_id = map_id.strip()
+        if not map_id:
+            return
+        if map_id == self.map_id:
+            if self._map_want:     # 待っている間に元の地図に戻された
+                self.get_logger().info(f"地図の切り替え（{self._map_want}）をやめました（{map_id} のまま）")
+                self._map_want = None
+            return
+        if self.map_locked:
+            if self._map_locked_said != map_id:   # retain なので再接続のたびに届く。同じ地図では1回だけ知らせる
+                self._map_locked_said = map_id
+                self._map_status("LOCKED", map_id, f"起動時に map:= で {self.map_id} を指定しているので、{map_id} に切り替えません")
+            return
+        if not map_id.replace("_", "").replace("-", "").isalnum():
+            self._map_status("FAILED", map_id, f"地図の名前が正しくありません: {map_id}")
+            return
+        if not os.path.isfile(self._map_file(map_id)):
+            self._map_status("FAILED", map_id, f"地図ファイルがありません: {self._map_file(map_id)}")
+            return
+        self._map_want = map_id
+        self._map_want_since = time.time()
+        self._map_pending_said = False
+
+    def _busy_reason(self) -> str:
+        lg = self.logic
+        if lg.tasks.current is not None or lg.tasks.queue:
+            return "タスク・移動の途中"
+        if lg.manual:
+            return "手動操縦中"
+        if abs(self.speed) > 0.02:
+            return "走行中"
+        return ""
+
+    def _try_map_change(self, now: float) -> None:
+        if not self._map_want or self._map_loading:
+            return
+        map_id = self._map_want
+        busy = self._busy_reason()
+        if busy:
+            if not self._map_pending_said:
+                self._map_pending_said = True
+                self._map_status("PENDING", map_id, f"{busy}なので、止まってから {map_id} に切り替えます")
+            return
+        if not self.load_map_cli.service_is_ready():
+            if now - self._map_want_since > 60.0:   # Nav2 が起動しない
+                self._map_want = None
+                self._map_status("FAILED", map_id, "Nav2 の地図サーバー（map_server/load_map）が使えません")
+            return
+        if not self.amcl_seen and now - self._map_want_since < 30.0:
+            return   # 起動直後: Nav2（AMCL）が動き出すまで待つ（起動しきる前の地図サーバーは読み直しに失敗することがある）
+        path = self._map_file(map_id)
+        self._map_loading = True
+        self.get_logger().info(f"地図を読み直します: {path}")
+        fut = self.load_map_cli.call_async(LoadMap.Request(map_url=path))
+        fut.add_done_callback(lambda f: self._on_map_loaded(map_id, path, f))
+
+    def _on_map_loaded(self, map_id: str, path: str, fut) -> None:
+        self._map_loading = False
+        if self._map_want == map_id:
+            self._map_want = None
+        try:
+            res = fut.result()
+        except Exception as e:
+            res = None
+            self.get_logger().error(f"LoadMap: {e}")
+        if res is None or res.result != LoadMap.Response.RESULT_SUCCESS:
+            code = "?" if res is None else res.result
+            self._map_status("FAILED", map_id, f"Nav2 が地図を読めませんでした（{path}、結果 {code}）。元の地図のままです")
+            return
+        old = self.map_id
+        self.map_id = map_id
+        wp_path = self._waypoints_file(map_id)
+        self.waypoints = WaypointBook(wp_path)
+        self.logic.waypoints = self.waypoints
+        self.get_logger().info(f"地図 {old} → {map_id} ・ 地点 {len(self.waypoints.items)} 件: {wp_path}")
+        # 新しい地図での現在地: 少し前にこの地図で保存した位置があればそこ、無ければ Home
+        pose = self._load_saved_pose() or parse_pose(self.cfg["localization"]["initial_pose"], self.waypoints)
+        for c in self.clear_costmap_cli:          # 前の地図の障害物を消す
+            if c.service_is_ready():
+                c.call_async(ClearEntireCostmap.Request())
+        if pose is None:
+            reason = f"地図を {map_id} に切り替えました。地点 '{self.cfg['localization']['initial_pose']}' が無いので、現在地を設定（SET_POSE）してください"
+        else:
+            self.pub_sim_map.publish(json_msg({"mapId": map_id, "path": path,
+                                               "start": [pose.x, pose.y, math.degrees(pose.theta)]}))
+            self._initial_pose = pose
+            self.amcl_seen = False                # 新しい地図での AMCL の推定が届くまで、位置を保存しない
+            self._initial_tries = 0
+            now = time.time()
+            self._repose = [now + 1.0, now + 3.0]  # シミュレーターが車を置き直すのを待ってから送る
+            reason = f"地図を {old} から {map_id} に切り替えました。現在地 ({pose.x:.2f}, {pose.y:.2f})"
+        d = {"state": "CHANGED", "mapId": map_id, "from": old, "reason": reason}
+        self.get_logger().info(f"地図: CHANGED {reason}")
+        self.pub_map_status.publish(json_msg(d))
+
+    def _repose_tick(self, now: float) -> None:
+        if self._repose and now >= self._repose[0]:
+            self._repose.pop(0)
+            if self._initial_pose is not None:
+                self.publish_initial_pose(self._initial_pose)
+
+    # ------------------------------------------------------------------
     #  周期処理
     # ------------------------------------------------------------------
     def _tick(self) -> None:
@@ -300,11 +453,13 @@ class MissionManager(Node):
         self._update_lost(now)
         self.nav.poll()
         lg.tick(now)
+        self._try_map_change(now)
+        self._repose_tick(now)
         self._save_pose(now, pose)
         if now - self._t_state >= 1.0 / float(self.cfg["publish"]["state_hz"]):
             self._t_state = now
             payload = lg.summary()
-            payload.update({"mapId": str(self.cfg["map_id"]), "speed": round(self.speed, 2),
+            payload.update({"mapId": self.map_id, "speed": round(self.speed, 2),
                             "locQuality": round(self.quality, 2)})
             if pose is not None:
                 payload.update(pose.to_dict())

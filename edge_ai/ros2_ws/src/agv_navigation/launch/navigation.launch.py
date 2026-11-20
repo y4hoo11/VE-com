@@ -68,7 +68,12 @@ def _setup(context, *args, **kwargs):
     bt_xml = os.path.join(share, "behavior_trees", "navigate_ackermann.xml")
     nav2_params = rewrite_nav2_params(params_src, map_yaml, bt_xml, use_sim_time)
 
-    overrides = {"use_sim_time": use_sim_time}
+    # 地図の名前は map:= のファイル名から決める（warehouse_a.yaml → warehouse_a）。
+    # Web はこの名前（telemetry の mapId）で表示する地図を選び、mission_manager は地図ごとの地点ファイルを選ぶ。
+    # map:= を指定しないときは demo_map で起動し、Web の設定（agv/config/map）の地図に切り替わる。
+    # map:= を指定したとき（開発用）は、その地図のまま（Web からの切り替えを受けない）
+    overrides = {"use_sim_time": use_sim_time, "map_id": os.path.splitext(os.path.basename(map_yaml))[0],
+                 "map_locked": bool(lc("map"))}
     if lc("agv_id"):
         overrides["agv_id"] = lc("agv_id")
     if lc("mqtt_host"):
@@ -108,7 +113,7 @@ def _setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument("map", default_value="", description="地図の yaml（空なら agv_navigation/maps/demo_map.yaml）"),
+        DeclareLaunchArgument("map", default_value="", description="地図の yaml（空なら demo_map で起動し、Web の設定の地図に切り替わる。指定するとその地図のまま）"),
         DeclareLaunchArgument("params_file", default_value="", description="Nav2 の設定（空なら config/nav2_params.yaml）"),
         DeclareLaunchArgument("mission_params", default_value="", description="mission_manager / mqtt_bridge の設定"),
         DeclareLaunchArgument("vision_params", default_value="", description="marker_localizer の設定"),

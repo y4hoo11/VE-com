@@ -15,7 +15,7 @@ const MENU: [string, string, boolean][] = [
   ['account', 'アカウント', false],
   ['values', '現在の設定値', false],
   ['request', '変更申請', false],
-  ['approvals', '申請の承認', true],
+  ['approvals', '申請の承認・変更', true],
   ['vehicles', '車両', true],
   ['users', 'ユーザー', true],
   ['system', 'システム情報', false],

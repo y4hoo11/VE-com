@@ -1,10 +1,10 @@
-// 地図・地点：地図と地点（waypoints.yaml）の確認。編集は将来
+// 地図・地点：地図と地点（config/waypoints/<地図名>.yaml、無ければ waypoints.yaml）の確認。編集は将来
 import { useState } from 'react';
 import { WAYPOINTS } from '../store/data';
-import { MAP } from '../store/map';
-import { useStore } from '../store/store';
+import { activeOwnWaypoints, MAP, MAP_IDS } from '../store/map';
+import { pickMap, useStore } from '../store/store';
 import { MapView } from '../components/MapView';
-import { Btn, Card, Kv, Tag } from '../components/ui';
+import { Btn, Card, inputCls, Kv, Tag } from '../components/ui';
 import { cx } from '../components/uiUtils';
 
 export function MapPage() {
@@ -15,7 +15,26 @@ export function MapPage() {
       <Card
         title={
           <>
-            地図 <span className="text-xs font-normal text-slate-500">{MAP.id}</span>
+            地図
+            <select
+              aria-label="表示する地図"
+              className={cx(inputCls, 'w-64 font-normal')}
+              value={MAP.id}
+              onChange={(e) => {
+                setSel(null);
+                pickMap(e.target.value);
+              }}
+            >
+              {MAP_IDS.map((id) => {
+                const n = s.vehicles.filter((v) => v.mapId === id).length;
+                return (
+                  <option key={id} value={id}>
+                    {id}
+                    {n ? `（車両 ${n}台）` : ''}
+                  </option>
+                );
+              })}
+            </select>
           </>
         }
         bodyClass="relative"
@@ -34,6 +53,11 @@ export function MapPage() {
           title={
             <>
               地点<span className="text-xs font-normal text-slate-500">{WAYPOINTS.length}件</span>
+              {!activeOwnWaypoints() && (
+                <span title="この地図用の地点ファイルが無いので、共通の waypoints.yaml を表示しています">
+                  <Tag tone="amber">共通の地点</Tag>
+                </span>
+              )}
             </>
           }
           right={
