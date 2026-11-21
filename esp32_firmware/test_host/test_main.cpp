@@ -75,6 +75,15 @@ static void run(Drive& d, int ms, int steer, int thr) {
   }
 }
 
+static void testTicks() {
+  printf("[ticks]\n");
+  // 27MHz・分周比 131 → 1 カウント = 4.889us
+  CHECK(pcaUsToTicks(1500, 27000000, 131) == 307);
+  CHECK(pcaUsToTicks(1000, 27000000, 131) == 205);
+  CHECK(pcaUsToTicks(2000, 27000000, 131) == 409);
+  CHECK(pcaUsToTicks(100000, 27000000, 131) == 4095);  // はみ出さない
+}
+
 static void testDrive() {
   printf("[drive]\n");
   P = Params();
@@ -143,6 +152,7 @@ static void testDrive() {
 int main() {
   testProtocol();
   testParams();
+  testTicks();
   testDrive();
   if (fails) {
     printf("失敗 %d 件\n", fails);

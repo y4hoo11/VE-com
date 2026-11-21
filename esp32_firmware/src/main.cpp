@@ -207,6 +207,14 @@ void loop() {
   static uint32_t lastRetry = 0;
   if (now - lastRetry >= 1000) {
     lastRetry = now;
+    // PCA9685 への書き込みの失敗が増えていたら知らせる（I2C の線のノイズ・接触不良の目安）
+    static uint32_t lastErr = 0;
+    if (drive.i2cErrors() != lastErr) {
+      char t[16];
+      snprintf(t, sizeof(t), "%lu", (unsigned long)drive.i2cErrors());
+      alert("I2C_ERR", t);
+      lastErr = drive.i2cErrors();
+    }
     if (!drive.ok()) {
       if (drive.begin()) {
         alert("PCA_OK", "PCA9685 found");

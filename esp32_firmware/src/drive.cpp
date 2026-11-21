@@ -14,6 +14,11 @@ static Adafruit_PWMServoDriver pca(PCA9685_ADDR, Wire);
 
 static int sgn(float v) { return (v > 0) - (v < 0); }
 
+uint16_t pcaUsToTicks(int us, uint32_t oscHz, uint8_t prescale) {
+  uint64_t t = ((uint64_t)us * oscHz + (uint64_t)500000 * (prescale + 1)) / ((uint64_t)1000000 * (prescale + 1));
+  return t > 4095 ? 4095 : (uint16_t)t;
+}
+
 bool Drive::begin() {
 #if USE_PCA9685
   Wire.beginTransmission(PCA9685_ADDR);
@@ -22,7 +27,13 @@ bool Drive::begin() {
     pca.begin();
     pca.setOscillatorFrequency(P.pca_osc_hz);
     pca.setPWMFreq(50);  // RC サーボ / ESC は 50Hz
+    // ライブラリと同じ式で分周比を覚えておく（writeMicroseconds は毎回 I2C で分周比を読み直し、
+    // 読み損ねると全然違うパルスを出してしまう → ESC が勝手に動く原因になるので使わない）
+    float pv = ((float)P.pca_osc_hz / (50 * 4096.0f)) + 0.5f - 1;
+    prescale_ = (uint8_t)constrain(pv, 3.0f, 255.0f);
   }
+  outSteerUs_ = -1;
+  outEscUs_ = -1;
 #else
 #if ESP_ARDUINO_VERSION_MAJOR >= 3
   ledcAttach(PIN_PWM_STEER, 50, 14);
@@ -123,6 +134,22 @@ void Drive::update(uint32_t nowMs, int steerPm, int thrPm) {
   write(nowMs, false);
 }
 
+// 1 チャンネルに書く。失敗したら false（次の周期でもう一度書く）
+bool Drive::pwmOut(uint8_t ch, int us) {
+#if USE_PCA9685
+#ifdef HOST_TEST
+  pca.writeMicroseconds(ch, us);
+  return true;
+#else
+  bool ok = pca.setPWM(ch, 0, pcaUsToTicks(us, P.pca_osc_hz, prescale_)) == 0;
+  if (!ok) i2cErrors_++;
+  return ok;
+#endif
+#else
+  return true;
+#endif
+}
+
 void Drive::write(uint32_t nowMs, bool force) {
   if (!force && nowMs - lastWrite_ < PWM_PERIOD_MS) return;
   lastWrite_ = nowMs;
@@ -134,11 +161,18 @@ void Drive::write(uint32_t nowMs, bool force) {
   // チャンネルを変えたら、前のチャンネルの信号は止める（古い信号が出続けないように）
   if (chSteer_ >= 0 && chSteer_ != cs && chSteer_ != ce) pca.setPWM(chSteer_, 0, 4096);
   if (chEsc_ >= 0 && chEsc_ != ce && chEsc_ != cs) pca.setPWM(chEsc_, 0, 4096);
+  if (cs != chSteer_ || ce != chEsc_) {
+    outSteerUs_ = -1;
+    outEscUs_ = -1;
+  }
   chSteer_ = cs;
   chEsc_ = ce;
+  // 値が変わったときだけ書く（I2C の量を減らす）。念のため 0.2 秒ごとに書き直す
+  const bool refresh = force || nowMs - lastRefresh_ >= 200;
+  if (refresh) lastRefresh_ = nowMs;
   // 同じ番号にしてしまったときは、ハンドルの信号が ESC に行かないよう ESC の信号だけ出す
-  if (cs != ce) pca.writeMicroseconds(cs, steerUs_);
-  pca.writeMicroseconds(ce, escUs_);
+  if (cs != ce && (refresh || steerUs_ != outSteerUs_)) outSteerUs_ = pwmOut(cs, steerUs_) ? steerUs_ : -1;
+  if (refresh || escUs_ != outEscUs_) outEscUs_ = pwmOut(ce, escUs_) ? escUs_ : -1;
 #else
   const uint32_t full = (1 << 14) - 1;
   uint32_t dS = (uint32_t)((uint64_t)steerUs_ * full / 20000);
