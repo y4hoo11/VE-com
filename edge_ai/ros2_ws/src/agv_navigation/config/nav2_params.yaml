@@ -6,7 +6,7 @@
 #    - 経路計画: SmacPlannerHybrid（Reeds-Shepp = 前進・後退の切り返しができる車の経路）
 #    - 経路追従: Regulated Pure Pursuit（allow_reversing: true、その場旋回なし）
 #    - 復帰動作: Spin（その場旋回）を使わない行動ツリー behavior_trees/navigate_ackermann.xml
-#    - 車体: 42cm x 19cm の長方形（footprint）、最小回転半径 0.6m（L=0.257m, 舵角25°）
+#    - 車体: 45cm x 20cm の長方形（footprint。実車の実測）、最小回転半径 0.6m（L=0.257m, 舵角25°）
 #    - オドメトリがスロットルからの推定なので、AMCL の動きのノイズ（alpha）を大きめに
 #  ※ navigation.launch.py が「地図のパス」「行動ツリーのパス」をこのファイルに書き足してから Nav2 に渡す
 # =====================================================================
@@ -134,8 +134,8 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      # 車体（中心が base_link）。42cm x 19cm に少し余裕
-      footprint: "[[0.22, 0.10], [0.22, -0.10], [-0.22, -0.10], [-0.22, 0.10]]"
+      # 車体（中心が base_link）。45cm x 20cm（実車の実測）
+      footprint: "[[0.225, 0.10], [0.225, -0.10], [-0.225, -0.10], [-0.225, 0.10]]"
       footprint_padding: 0.02
       plugins: ["obstacle_layer", "inflation_layer"]
       inflation_layer:
@@ -166,7 +166,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_link
       use_sim_time: False
-      footprint: "[[0.22, 0.10], [0.22, -0.10], [-0.22, -0.10], [-0.22, 0.10]]"
+      footprint: "[[0.225, 0.10], [0.225, -0.10], [-0.225, -0.10], [-0.225, 0.10]]"
       footprint_padding: 0.02
       resolution: 0.05
       track_unknown_space: true

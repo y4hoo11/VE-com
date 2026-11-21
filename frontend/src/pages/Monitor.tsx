@@ -1,5 +1,4 @@
 // 運行モニター（ホーム）：地図＋車両一覧＋最新のログ。普段開いておく画面
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { COL, PAUSED_COL, PHASE, rosModeText, TS, type Vehicle } from '../store/data';
 import { hasMap, MAP } from '../store/map';
@@ -53,7 +52,6 @@ export function Monitor() {
         bodyClass="relative"
       >
         <MapView mapKey="main" />
-        <OtherMapBanner />
       </Card>
 
       <Card
@@ -215,44 +213,5 @@ function MapSwitch() {
       })}
       <span className="text-xs font-normal text-slate-500">{size}</span>
     </span>
-  );
-}
-
-// 表示中と違う地図の車両があれば、地図の上に帯を出す。✕ で消せる
-// （消したあとでも、その地図を使う車両が増えたり減ったりしたら、もう一度出す。画面を移ると元に戻る）
-function OtherMapBanner() {
-  const s = useStore();
-  const [closed, setClosed] = useState<string[]>([]);
-  const others = [...mapsInUse(s.vehicles)]
-    .filter(([id]) => id !== MAP.id)
-    .map(([id, vs]) => ({ id, vs, key: `${id}:${vs.map((v) => v.id).join(',')}` }))
-    .filter((o) => !closed.includes(o.key));
-  if (!others.length) return null;
-  return (
-    <div className="absolute top-2 right-14 left-2 z-10 space-y-1">
-      {others.map(({ id, vs, key }) => (
-        <div key={id} className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50/95 px-3 py-1.5 text-sm text-amber-900 shadow-sm dark:border-amber-800 dark:bg-amber-950/95 dark:text-amber-200">
-          <span className="min-w-0 truncate">
-            {vs.map((v) => v.name).join('、')} は <b>{id}</b> を使っています
-          </span>
-          {hasMap(id) ? (
-            <Btn size="sm" className="ml-auto" onClick={() => pickMap(id)}>
-              この地図を表示
-            </Btn>
-          ) : (
-            <span className="ml-auto text-xs">Web に入っていない地図です。Web を起動し直してください</span>
-          )}
-          <button
-            type="button"
-            aria-label="このお知らせを閉じる"
-            title="閉じる"
-            onClick={() => setClosed((c) => [...c, key])}
-            className="shrink-0 rounded px-1.5 py-0.5 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900"
-          >
-            ✕
-          </button>
-        </div>
-      ))}
-    </div>
   );
 }
