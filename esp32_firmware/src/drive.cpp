@@ -129,8 +129,15 @@ void Drive::write(uint32_t nowMs, bool force) {
   escUs_ = constrain(escUs_, 900, 2100);
 #if USE_PCA9685
   if (!ok_) return;
-  pca.writeMicroseconds(PCA_CH_STEER, steerUs_);
-  pca.writeMicroseconds(PCA_CH_ESC, escUs_);
+  const int cs = P.ch_steer, ce = P.ch_esc;
+  // チャンネルを変えたら、前のチャンネルの信号は止める（古い信号が出続けないように）
+  if (chSteer_ >= 0 && chSteer_ != cs && chSteer_ != ce) pca.setPWM(chSteer_, 0, 4096);
+  if (chEsc_ >= 0 && chEsc_ != ce && chEsc_ != cs) pca.setPWM(chEsc_, 0, 4096);
+  chSteer_ = cs;
+  chEsc_ = ce;
+  // 同じ番号にしてしまったときは、ハンドルの信号が ESC に行かないよう ESC の信号だけ出す
+  if (cs != ce) pca.writeMicroseconds(cs, steerUs_);
+  pca.writeMicroseconds(ce, escUs_);
 #else
   const uint32_t full = (1 << 14) - 1;
   uint32_t dS = (uint32_t)((uint64_t)steerUs_ * full / 20000);

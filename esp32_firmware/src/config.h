@@ -25,8 +25,8 @@
 // 1 = PCA9685 を使う（推奨）。0 = ESP32 から直接 PWM を出す（PCA9685 が無いとき）
 #define USE_PCA9685 1
 #define PCA9685_ADDR 0x40
-#define PCA_CH_STEER 0          // PCA9685 のチャンネル: ステアリングサーボ
-#define PCA_CH_ESC 1            // PCA9685 のチャンネル: ESC
+#define PCA_CH_STEER 0          // PCA9685 のチャンネル: ステアリングサーボ（実際はパラメータ ch_steer で変更できる）
+#define PCA_CH_ESC 1            // PCA9685 のチャンネル: ESC（実際はパラメータ ch_esc で変更できる）
 #define PIN_PWM_STEER 0         // USE_PCA9685 = 0 のときの直接出力ピン
 #define PIN_PWM_ESC 1
 

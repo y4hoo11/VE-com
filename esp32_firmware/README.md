@@ -52,6 +52,8 @@
 `set steer_center_us 1530` → `save` のように書き換えられます（ESP32 内に保存され、電源を切っても残る）。
 コンソールは車両の通常の起動（serial_bridge）と USB を取り合うので、先に `bash edge_ai/scripts/start_robot.sh stop` で止めてから使います（手順は「AGV 実機の接続・起動・試験手順」の試験1-1）。
 
+PCA9685 のどのチャンネルにサーボ・ESC を挿したかは `ch_steer`（初期値 0）・`ch_esc`（初期値 1）で変えられます（挿し替え不要。例 `set ch_esc 0` → `set ch_steer 2` → `save`）。
+
 最初に必ず確認するもの: `steer_center_us`（まっすぐ）、`steer_invert`（左右）、`thr_invert`（前後）、`max_thr`（出力上限。最初は低く）、`imu_yaw_sign`（車を左に回したときにヨー角が増えるか）。
 
 ## テスト（PC 上でロジックだけ）

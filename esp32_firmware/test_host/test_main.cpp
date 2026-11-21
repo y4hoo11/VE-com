@@ -125,6 +125,19 @@ static void testDrive() {
   run(d, 50, 0, 0);
   run(d, 500, 0, -500);
   CHECK(d.appliedThr() == 0 && g_pwm_us[PCA_CH_ESC] == 1500);
+  P.esc_mode = 0;
+
+  // チャンネル入れ替え（ch_esc=0, ch_steer=2）: 前のチャンネルは止まり、新しいチャンネルに出る
+  P.ch_esc = 0;
+  P.ch_steer = 2;
+  run(d, 20, 1000, 0);
+  CHECK(g_pwm_us[2] == 1100 && g_pwm_us[0] == 1500 && g_pwm_us[1] == 0);
+  // 同じ番号にしたら ESC の信号だけ（ハンドルの信号が ESC に行かない）
+  P.ch_steer = 0;
+  run(d, 20, 1000, 0);
+  CHECK(g_pwm_us[0] == 1500);
+  P.ch_steer = 0;
+  P.ch_esc = 1;
 }
 
 int main() {

@@ -33,6 +33,8 @@ class Drive {
   uint32_t lastMs_ = 0;
   uint32_t lastWrite_ = 0;
   bool ok_ = false;
+  int chSteer_ = -1;         // 最後に出力したチャンネル（変わったら前のチャンネルを止める）
+  int chEsc_ = -1;
 
   int thrToUs(int thrPm) const;
   int steerToUs(int steerPm) const;

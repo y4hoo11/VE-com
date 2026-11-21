@@ -10,4 +10,5 @@ struct Adafruit_PWMServoDriver {
   void setOscillatorFrequency(uint32_t) {}
   void setPWMFreq(float) {}
   void writeMicroseconds(uint8_t ch, uint16_t us) { g_pwm_us[ch] = us; }
+  void setPWM(uint8_t ch, uint16_t, uint16_t) { g_pwm_us[ch] = 0; }  // 信号を止める
 };

@@ -32,6 +32,10 @@ struct Params {
   int32_t vbat_scale = 4030;       // 分圧比×1000（(R1+R2)/R2×1000。10k/3.3k なら 4030）
   int32_t imu_yaw_sign = 1;        // 左に曲がったときヨー角が増えなければ -1
   int32_t pca_osc_hz = 27000000;   // PCA9685 の発振周波数（個体差。パルス幅がずれるときに調整）
+
+  // PCA9685 のどのチャンネルに挿したか（0〜15）。挿し替えずに $P で変えられる
+  int32_t ch_steer = 0;            // ステアリングサーボ（config.h の PCA_CH_STEER と同じ初期値）
+  int32_t ch_esc = 1;              // ESC（config.h の PCA_CH_ESC と同じ初期値）
 };
 
 extern Params P;

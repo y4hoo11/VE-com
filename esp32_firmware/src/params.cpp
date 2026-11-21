@@ -21,6 +21,7 @@ Entry table[] = {
     {"thr_slew", &P.thr_slew},               {"wd_ms", &P.wd_ms},
     {"us_stop_mm", &P.us_stop_mm},           {"vbat_scale", &P.vbat_scale},
     {"imu_yaw_sign", &P.imu_yaw_sign},       {"pca_osc_hz", &P.pca_osc_hz},
+    {"ch_steer", &P.ch_steer},               {"ch_esc", &P.ch_esc},
 };
 const size_t N = sizeof(table) / sizeof(table[0]);
 
@@ -32,6 +33,7 @@ int32_t clampParam(const char* name, int32_t v) {
   if (!strcmp(name, "steer_range_us") || !strcmp(name, "esc_fwd_us") || !strcmp(name, "esc_rev_us"))
     return constrain(v, 0, 700);
   if (!strcmp(name, "esc_mode")) return constrain(v, 0, 2);
+  if (!strcmp(name, "ch_steer") || !strcmp(name, "ch_esc")) return constrain(v, 0, 15);
   return v;
 }
 }  // namespace
