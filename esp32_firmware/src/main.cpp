@@ -43,9 +43,28 @@ static void alert(const char* code, const char* text) {
   sendLine(b);
 }
 
+// I2C の線の上で返事をした機器のアドレスを "i2c:3C 38 40" の形で書く（配線チェック用）
+//   基板に最初から載っている OLED(3C)・AHT21(38)・KXTJ3(0E/0F) も見えるので、
+//   それらだけ見えて 40(PCA9685)・28/29(BNO055) が無ければ CN7 から先の配線、何も見えなければピン設定を疑う
+static void i2cScan(char* out, size_t size) {
+  size_t len = snprintf(out, size, "i2c:");
+  int found = 0;
+  for (uint8_t a = 0x08; a < 0x78 && len + 4 < size; a++) {
+    Wire.beginTransmission(a);
+    if (Wire.endTransmission() == 0) {
+      len += snprintf(out + len, size - len, "%s%02X", found ? " " : "", a);
+      found++;
+    }
+  }
+  if (!found) snprintf(out + len, size - len, "none");
+}
+
 static void sendInfo() {
-  char b[96];
-  snprintf(b, sizeof(b), "I,%s,%s,%s", FW_VERSION, imu.name(), USE_PCA9685 ? (drive.ok() ? "PCA9685" : "PCA9685_NG") : "LEDC");
+  char scan[100];
+  i2cScan(scan, sizeof(scan));
+  char b[150];
+  snprintf(b, sizeof(b), "I,%s,%s,%s,%s", FW_VERSION, imu.name(),
+           USE_PCA9685 ? (drive.ok() ? "PCA9685" : "PCA9685_NG") : "LEDC", scan);
   sendLine(b);
 }
 

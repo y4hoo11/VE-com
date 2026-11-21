@@ -267,7 +267,7 @@ PC1（mission_manager）の動き:
 |---|---|
 | `$T,ms,yaw_cdeg,gz_mdps,vbat_mv,us_mm,enc,flags,thr,steer,seq*HH` | 20Hz テレメトリ。yaw は 0.01度（反時計回り+）、gz は 0.001 deg/s、us_mm は超音波距離（未接続 -1）、enc はエンコーダ累積（未接続 -1）、thr/steer は実際に出力中の値（‰） |
 | `$A,code,text*HH` | アラート（`BOOT` `ESTOP_BTN` `US_STOP` `US_CLEAR` `WD` `IMU_FAIL` `PCA_FAIL` `ESTOP` `CLEAR`） |
-| `$I,fw,imu,pwm*HH` | 起動時/要求時の情報（例 `$I,1.0.0,BNO055,PCA9685`） |
+| `$I,fw,imu,pwm,i2c*HH` | 起動時/要求時の情報（例 `$I,1.0.0,BNO055,PCA9685,i2c:0E 28 38 3C 40`）。i2c は I2C で返事をした機器のアドレス（配線チェック用、無ければ `i2c:none`） |
 | `$p,name,value*HH` | パラメータ1件 |
 
 `flags`（ビット）: `1`=非常停止ラッチ中, `2`=指令タイムアウト中, `4`=超音波停止中, `8`=IMU正常, `16`=PWM正常, `32`=後退中

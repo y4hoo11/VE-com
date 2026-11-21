@@ -19,7 +19,7 @@
 //   KXTJ3(0x0E/0x0F) も同じ線にいるが、PCA9685(0x40)・BNO055(0x28/0x29) とアドレスがぶつからない
 #define PIN_I2C_SDA 8
 #define PIN_I2C_SCL 9
-#define I2C_FREQ 400000
+#define I2C_FREQ 100000  // ジャンパ線・ブレッドボードでも安定するよう 100kHz（400kHz は線が短いときだけ）
 
 // ---- PWM 出力 ----
 // 1 = PCA9685 を使う（推奨）。0 = ESP32 から直接 PWM を出す（PCA9685 が無いとき）
