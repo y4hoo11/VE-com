@@ -101,7 +101,8 @@ void Drive::update(uint32_t nowMs, int steerPm, int thrPm) {
       }
     }
     if (state_ == BRAKE) {
-      out = -max(500, abs(cur));
+      // ブレーキの強さ。max_thr を超えないようにする（前後の向きが逆の設定だと、ブレーキの信号が「前進」になって飛び出すため）
+      out = -max(min(500, (int)P.max_thr), abs(cur));
       if (nowMs - stateSince_ >= (uint32_t)P.brake_ms) {
         state_ = REV_ARM;
         stateSince_ = nowMs;

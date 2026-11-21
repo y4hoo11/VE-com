@@ -68,6 +68,31 @@ static void sendInfo() {
   sendLine(b);
 }
 
+// I2C の線が「話の途中」で止まっている（どこかの機器が SDA を LOW のまま握っている）と、
+// どの機器とも話せなくなる。ESP32 だけがリセットされたとき（USB の抜き挿しやポートを開いたとき）に起きる。
+// SCL を最大 9 回動かして機器に SDA を離させ、最後に STOP を送って線を空きにする
+static void i2cBusRecover() {
+  pinMode(PIN_I2C_SDA, INPUT_PULLUP);
+  pinMode(PIN_I2C_SCL, OUTPUT_OPEN_DRAIN);
+  digitalWrite(PIN_I2C_SCL, HIGH);
+  delayMicroseconds(10);
+  for (int i = 0; i < 9 && digitalRead(PIN_I2C_SDA) == LOW; i++) {
+    digitalWrite(PIN_I2C_SCL, LOW);
+    delayMicroseconds(10);
+    digitalWrite(PIN_I2C_SCL, HIGH);
+    delayMicroseconds(10);
+  }
+  pinMode(PIN_I2C_SDA, OUTPUT_OPEN_DRAIN);  // STOP: SCL が HIGH の間に SDA を LOW → HIGH
+  digitalWrite(PIN_I2C_SDA, LOW);
+  delayMicroseconds(10);
+  digitalWrite(PIN_I2C_SCL, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(PIN_I2C_SDA, HIGH);
+  delayMicroseconds(10);
+  pinMode(PIN_I2C_SDA, INPUT);
+  pinMode(PIN_I2C_SCL, INPUT);
+}
+
 static void emitParam(const char* name, int32_t value) {
   char b[64];
   snprintf(b, sizeof(b), "p,%s,%ld", name, (long)value);
@@ -153,9 +178,13 @@ void setup() {
   Serial.setTxTimeoutMs(0);  // ラズパイが読んでいなくても止まらないように
 #endif
   paramsLoad();
+  i2cBusRecover();
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQ);
   // 起動直後はニュートラル（ESC はニュートラル信号を受けて準備完了になる）
   bool pwmOk = drive.begin();
+  // BNO055 は電源が入ってから約 0.65 秒は返事をしないので待つ（PCA9685 が見つからなかったときもここで再挑戦）
+  delay(700);
+  if (!pwmOk) pwmOk = drive.begin();
   bool imuOk = imu.begin();
   sensors::begin();
   delay(200);
@@ -171,6 +200,25 @@ void loop() {
   // ---- 受信 ----
   while (Serial.available() > 0) {
     if (reader.feed((char)Serial.read())) handleCommand((char*)reader.body());
+  }
+
+  // ---- 起動時に見つからなかった I2C 機器を探し直す（1 秒ごと）----
+  //   PCA9685 が見つからないと信号が 1 本も出ず、ESC が「信号なし」で鳴り続けるため
+  static uint32_t lastRetry = 0;
+  if (now - lastRetry >= 1000) {
+    lastRetry = now;
+    if (!drive.ok()) {
+      if (drive.begin()) {
+        alert("PCA_OK", "PCA9685 found");
+        sendInfo();
+      }
+    } else if (!imu.ok() && cmdThr == 0 && drive.appliedThr() == 0) {
+      // BNO055 の初期化は 1 秒近く止まるので、走っていないときだけ（見つからなければすぐ終わる）
+      if (imu.begin()) {
+        alert("IMU_OK", imu.name());
+        sendInfo();
+      }
+    }
   }
 
   // ---- センサー ----
