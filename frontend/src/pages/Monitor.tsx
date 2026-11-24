@@ -183,14 +183,8 @@ function mapsInUse(vs: Vehicle[]) {
 function MapSwitch() {
   const s = useStore();
   const used = mapsInUse(s.vehicles);
-  const size = `${MAP.width.toFixed(0)}m × ${MAP.height.toFixed(0)}m`;
-  if (used.size === 0 || (used.size === 1 && used.has(MAP.id))) {
-    return (
-      <span className="text-xs font-normal text-slate-500">
-        {MAP.id} ・ {size}
-      </span>
-    );
-  }
+  // 地図が1つだけのときは何も出さない（地図名と大きさの表記はなくした）
+  if (used.size === 0 || (used.size === 1 && used.has(MAP.id))) return null;
   const ids = used.has(MAP.id) ? [...used.keys()] : [MAP.id, ...used.keys()];
   return (
     <span className="flex flex-wrap items-center gap-1.5">
@@ -213,7 +207,6 @@ function MapSwitch() {
           </button>
         );
       })}
-      <span className="text-xs font-normal text-slate-500">{size}</span>
     </span>
   );
 }

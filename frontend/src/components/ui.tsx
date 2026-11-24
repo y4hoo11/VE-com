@@ -1,6 +1,6 @@
 // 共通の小さな部品（コンポーネントだけ。関数・定数は uiUtils.ts）
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { COL, PAUSED_COL, RANKS, REQ_STATUS, ST, TS, type Level, type Rank, type ReqStatus, type SettingItem, type TStatus, type Vehicle } from '../store/data';
+import { COL, LEVEL_JA, PAUSED_COL, RANKS, REQ_STATUS, ST, TS, type Level, type Rank, type ReqStatus, type SettingItem, type TStatus, type Vehicle } from '../store/data';
 import { S, useStore } from '../store/store';
 import { cx } from './uiUtils';
 
@@ -60,7 +60,7 @@ export function LvChip({ l }: { l: Level }) {
     WARN: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
     ERROR: 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
   }[l];
-  return <span className={cx('inline-block w-12 rounded px-1.5 py-0.5 text-center text-[11px] font-bold', c)}>{l}</span>;
+  return <span className={cx('inline-block w-16 rounded px-1.5 py-0.5 text-center text-[11px] font-bold', c)}>{LEVEL_JA[l]}</span>;
 }
 
 export function PrioChip({ p }: { p: number }) {

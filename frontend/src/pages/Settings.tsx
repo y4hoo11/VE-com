@@ -71,9 +71,47 @@ function Row({ label, hint, children }: { label: string; hint?: ReactNode; child
 // まだ動かない項目の目印（画面だけ先に用意している）
 const Soon = () => <Tag>準備中</Tag>;
 
+// 受け取る通知の種類（ベルに出すもの）。ログの重さ INFO / WARN / ERROR と対応
+// 説明は「！」を押している間だけ出す（説明のない種類には「！」を出さない）
+const NOTIFY_KINDS = [
+  ['INFO', 'お知らせ', ''],
+  ['WARN', '警告', 'オフライン時、接続が不安定、切断された時など'],
+  ['ERROR', '異常', '緊急停止、異常終了など'],
+] as const;
+
+// 押している間だけ説明を出す「！」マーク
+function HoldInfo({ text }: { text: string }) {
+  const [on, setOn] = useState(false);
+  const hide = () => setOn(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        aria-label="説明を見る（押している間だけ表示）"
+        className="flex h-4 w-4 select-none items-center justify-center rounded-full border border-slate-400 text-[10px] font-bold leading-none text-slate-500 hover:bg-slate-100 dark:border-slate-500 dark:text-slate-400 dark:hover:bg-slate-800"
+        onPointerDown={() => setOn(true)}
+        onPointerUp={hide}
+        onPointerLeave={hide}
+        onPointerCancel={hide}
+        onKeyDown={(e) => (e.key === ' ' || e.key === 'Enter') && setOn(true)}
+        onKeyUp={hide}
+        onBlur={hide}
+        onContextMenu={(e) => e.preventDefault()}
+      >
+        !
+      </button>
+      {on && (
+        <span role="tooltip" className="absolute left-6 top-1/2 z-10 -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-xs text-white shadow dark:bg-slate-700">
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 const THEMES = [
   ['light', 'ライト'],
-  ['gray', 'グレイ'],
+  ['gray', 'グレー'],
   ['dark', 'ダーク'],
 ] as const;
 
@@ -85,8 +123,8 @@ function Display() {
     emit();
   };
   return (
-    <Card title={<>表示 <span className="text-xs font-normal text-slate-500">この端末のブラウザに保存されます</span></>} bodyClass="px-5">
-      <Row label="テーマ" hint="グレイは、ライトより明るさを抑えた落ち着いた配色です">
+    <Card title="表示" bodyClass="px-5">
+      <Row label="テーマ">
   <div className="flex gap-4 text-sm">
     {THEMES.map(([t, label]) => (
       <label key={t} className="flex items-center gap-1.5">
@@ -104,14 +142,6 @@ function Display() {
           <Soon />
         </div>
       </Row>
-      <Row label="地図の表示倍率">
-        <div className="flex items-center gap-2">
-          <select disabled className={cx(inputCls, 'w-40!')} value="100">
-            <option value="100">100%</option>
-          </select>
-          <Soon />
-        </div>
-      </Row>
       <Row label="地図に表示するもの">
         <div className="flex gap-4 text-sm">
           {(['path', 'labels', 'grid'] as const).map((k) => (
@@ -122,7 +152,7 @@ function Display() {
           ))}
         </div>
       </Row>
-      <Row label="異常のときに音を鳴らす" hint="ERROR のログ（緊急停止など）が届いたときに鳴らします">
+      <Row label="異常のときに音を鳴らす">
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-sm">
             <input type="checkbox" checked={s.sound} onChange={(e) => set(() => (s.sound = e.target.checked))} />
@@ -134,14 +164,16 @@ function Display() {
         </div>
       </Row>
       <Row label="受け取る通知">
-        <div className="flex items-center gap-4 text-sm text-slate-400">
-          {['お知らせ', '警告', '異常'].map((k) => (
-            <label key={k} className="flex items-center gap-1.5">
-              <input type="checkbox" disabled checked readOnly />
-              {k}
-            </label>
+        <div className="space-y-1.5 text-sm">
+          {NOTIFY_KINDS.map(([k, label, desc]) => (
+            <div key={k} className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5">
+                <input type="checkbox" checked={s.notify[k]} onChange={(e) => set(() => (s.notify[k] = e.target.checked))} />
+                {label}
+              </label>
+              {desc && <HoldInfo text={desc} />}
+            </div>
           ))}
-          <Soon />
         </div>
       </Row>
     </Card>
@@ -244,7 +276,6 @@ function Account() {
       <Kv
         rows={[
           ['ユーザー名', s.user.name],
-          ['表示名', <>{s.user.name} <Soon /></>],
           ['メールアドレス', u?.email ?? '—'],
           ['権限', s.user.role],
           ['登録日', u?.created ?? '—'],
@@ -389,15 +420,6 @@ function System() {
           </tbody>
         </table>
       </Card>
-      <Card title="バージョン" bodyClass="p-5">
-        <Kv
-          rows={[
-            ['画面', 'frontend（React + Vite + Tailwind CSS）'],
-            ['サーバー', 'backend（Express + Socket.IO + Prisma）'],
-            ['通信仕様', 'docs/agv_protocol.md'],
-          ]}
-        />
-      </Card>
     </div>
   );
 }
@@ -430,7 +452,7 @@ function ChangeRequest() {
           title={
             <>
               設定変更の申請
-              <span className="text-xs font-normal text-slate-500">{item ? RANKS[item.rank].sub : 'この項目は申請の対象外です。'}</span>
+              {!item && <span className="text-xs font-normal text-slate-500">この項目は申請の対象外です。</span>}
             </>
           }
           right={
@@ -571,11 +593,6 @@ function RequestFields({ item, cur, open, userName, role, onReset }: { item: Set
         )}
       </div>
       <div className="flex items-center gap-3 px-5 py-3.5">
-        <div className="text-xs leading-relaxed text-slate-500">
-          承認されるまで、設定は変わりません。
-          <br />
-          承認前なら、申請を取り下げられます。
-        </div>
         <div className="flex-1" />
         <Btn variant="ghost" onClick={onReset}>
           キャンセル
@@ -596,7 +613,7 @@ function MyRequests() {
   const s = useStore();
   const mine = s.requests.filter((r) => r.requester === s.user.name && !r.direct);
   return (
-    <Card title={<>あなたの申請 <span className="text-xs font-normal text-slate-500">承認待ちのあいだは取り下げられます</span></>}>
+    <Card title="あなたの申請">
       {!mine.length ? (
         <div className="p-6 text-center text-sm text-slate-400">まだ申請はありません</div>
       ) : (
@@ -769,7 +786,6 @@ function ApprovalRules({ rank }: { rank: Rank | 4 }) {
           ))}
         </div>
       </div>
-      <RuleBlock label="反映のしかた">{r.reflect}</RuleBlock>
       {rank >= 2 && <RuleBlock label="承認前の確認">承認の前に、「現在の値 → 新しい値」を確認画面で表示します。</RuleBlock>}
       {rank === 3 && (
         <RuleBlock label="ルール">
