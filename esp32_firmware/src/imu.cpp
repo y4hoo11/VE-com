@@ -1,12 +1,33 @@
 #include "imu.h"
 
-#include <Adafruit_BNO055.h>
 #include <Wire.h>
 
 #include "config.h"
 #include "params.h"
 
-static Adafruit_BNO055* bno = nullptr;
+// BNO055 はライブラリを使わず、レジスタを直接読み書きする。
+// Adafruit_BNO055::begin() は、リセット後に「チップが返事するまで」終わりのないループで待つ。
+// I2C が不安定だとそこで ESP32 が止まり、PCA9685 は最後の信号（走行中ならその速さ）を出し続けてしまうため。
+static uint8_t bnoAddr = 0;
+static const uint8_t BNO_CHIP_ID = 0x00, BNO_PAGE_ID = 0x07, BNO_GYR_X_LSB = 0x14, BNO_OPR_MODE = 0x3D,
+                     BNO_PWR_MODE = 0x3E, BNO_SYS_TRIGGER = 0x3F;
+static const uint8_t BNO_ID = 0xA0, MODE_CONFIG = 0x00, MODE_IMUPLUS = 0x08;
+
+static bool bnoWrite(uint8_t reg, uint8_t val) {
+  Wire.beginTransmission(bnoAddr);
+  Wire.write(reg);
+  Wire.write(val);
+  return Wire.endTransmission() == 0;
+}
+
+static bool bnoRead(uint8_t reg, uint8_t* buf, uint8_t n) {
+  Wire.beginTransmission(bnoAddr);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom(bnoAddr, n) != n) return false;
+  for (uint8_t i = 0; i < n; i++) buf[i] = Wire.read();
+  return true;
+}
 
 static float wrap180(float a) {
   while (a > 180.0f) a -= 360.0f;
@@ -30,13 +51,19 @@ bool Imu::begin() {
 }
 
 bool Imu::beginBno(uint8_t addr) {
-  bno = new Adafruit_BNO055(55, addr, &Wire);
-  if (!bno->begin(OPERATION_MODE_IMUPLUS)) {
-    delete bno;
-    bno = nullptr;
-    return false;
-  }
-  bno->setExtCrystalUse(true);
+  bnoAddr = addr;
+  uint8_t id = 0;
+  if (!bnoRead(BNO_CHIP_ID, &id, 1) || id != BNO_ID) return false;
+  // 設定モード → 通常電源 → ページ0 → 外部水晶 → IMUPLUS（ジャイロ＋加速度で向きを計算。地磁気は使わない）
+  // どれか1つでも失敗したら諦める（待ち続けない）。全部で 0.1 秒くらい
+  if (!bnoWrite(BNO_OPR_MODE, MODE_CONFIG)) return false;
+  delay(25);
+  if (!bnoWrite(BNO_PWR_MODE, 0x00) || !bnoWrite(BNO_PAGE_ID, 0x00)) return false;
+  delay(10);
+  if (!bnoWrite(BNO_SYS_TRIGGER, 0x80)) return false;
+  delay(10);
+  if (!bnoWrite(BNO_OPR_MODE, MODE_IMUPLUS)) return false;
+  delay(20);
   kind_ = BNO055;
   name_ = "BNO055";
   ok_ = true;
@@ -101,14 +128,15 @@ void Imu::update(uint32_t nowMs) {
   if (!ok_) return;
   const float sign = (P.imu_yaw_sign >= 0) ? 1.0f : -1.0f;
   if (kind_ == BNO055) {
-    imu::Vector<3> e = bno->getVector(Adafruit_BNO055::VECTOR_EULER);      // heading: 時計回り 0〜360
-    imu::Vector<3> g = bno->getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);  // [deg/s]
-    float heading = e.x();
-    if (isnan(heading)) {
+    // 0x14〜0x1B を一度に読む: ジャイロ X,Y,Z（16 LSB = 1 deg/s）、向き heading（16 LSB = 1 度、時計回り 0〜360）
+    uint8_t b[8];
+    if (!bnoRead(BNO_GYR_X_LSB, b, 8)) {
       if (++failCount_ > 50) ok_ = false;
       return;
     }
     failCount_ = 0;
+    const float gzRaw = (int16_t)(b[4] | (b[5] << 8)) / 16.0f;
+    const float heading = (int16_t)(b[6] | (b[7] << 8)) / 16.0f;
     if (first_) {
       lastHeading_ = heading;
       first_ = false;
@@ -116,7 +144,7 @@ void Imu::update(uint32_t nowMs) {
     float d = wrap180(heading - lastHeading_);  // 前回からの変化（359→1 のまたぎも OK）
     lastHeading_ = heading;
     yawAcc_ += -d * sign;                       // 時計回り → 反時計回り＋に変換
-    gz_ = g.z() * sign;
+    gz_ = gzRaw * sign;
   } else if (kind_ == MPU6050) {
     float dps;
     uint32_t us = micros();

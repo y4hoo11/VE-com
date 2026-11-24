@@ -205,6 +205,7 @@ void loop() {
   // ---- 起動時に見つからなかった I2C 機器を探し直す（1 秒ごと）----
   //   PCA9685 が見つからないと信号が 1 本も出ず、ESC が「信号なし」で鳴り続けるため
   static uint32_t lastRetry = 0;
+  static uint32_t lastImuRetry = 0;
   if (now - lastRetry >= 1000) {
     lastRetry = now;
     // PCA9685 への書き込みの失敗が増えていたら知らせる（I2C の線のノイズ・接触不良の目安）
@@ -220,8 +221,9 @@ void loop() {
         alert("PCA_OK", "PCA9685 found");
         sendInfo();
       }
-    } else if (!imu.ok() && cmdThr == 0 && drive.appliedThr() == 0) {
-      // BNO055 の初期化は 1 秒近く止まるので、走っていないときだけ（見つからなければすぐ終わる）
+    } else if (!imu.ok() && cmdThr == 0 && drive.appliedThr() == 0 && now - lastImuRetry >= 5000) {
+      // ジャイロの初期化は 0.1 秒ほど止まるので、走っていないときに 5 秒ごと（見つからなければすぐ終わる）
+      lastImuRetry = now;
       if (imu.begin()) {
         alert("IMU_OK", imu.name());
         sendInfo();
