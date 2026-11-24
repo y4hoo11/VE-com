@@ -49,6 +49,7 @@ class Drive {
   int lastErrCode_ = 0;
   int lastErrCh_ = -1;
   bool pwmOut(uint8_t ch, int us);
+  void pwmOff(uint8_t ch);
 
   int thrToUs(int thrPm) const;
   int steerToUs(int steerPm) const;

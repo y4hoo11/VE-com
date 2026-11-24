@@ -14,6 +14,32 @@ static Adafruit_PWMServoDriver pca(PCA9685_ADDR, Wire);
 
 static int sgn(float v) { return (v > 0) - (v < 0); }
 
+#if USE_PCA9685 && !defined(HOST_TEST)
+// PCA9685 のレジスタ（データシート 7.3）
+static const uint8_t PCA_MODE1 = 0x00, PCA_LED0_ON_L = 0x06, PCA_PRESCALE = 0xFE;
+static const uint8_t MODE1_SLEEP = 0x10, MODE1_AI = 0x20;
+
+static bool pcaRead8(uint8_t reg, uint8_t& v) {
+  Wire.beginTransmission(PCA9685_ADDR);
+  Wire.write(reg);
+  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.requestFrom((uint8_t)PCA9685_ADDR, (uint8_t)1) != 1) return false;
+  v = Wire.read();
+  return true;
+}
+
+// 1 チャンネルの ON/OFF カウントを書く（off = 4096 は「常に OFF」）。I2C のエラー番号を返す（0 = 成功）
+static uint8_t pcaSet(uint8_t ch, uint16_t on, uint16_t off) {
+  Wire.beginTransmission(PCA9685_ADDR);
+  Wire.write((uint8_t)(PCA_LED0_ON_L + 4 * ch));
+  Wire.write((uint8_t)(on & 0xFF));
+  Wire.write((uint8_t)(on >> 8));
+  Wire.write((uint8_t)(off & 0xFF));
+  Wire.write((uint8_t)(off >> 8));
+  return Wire.endTransmission();
+}
+#endif
+
 uint16_t pcaUsToTicks(int us, uint32_t oscHz, uint8_t prescale) {
   uint64_t t = ((uint64_t)us * oscHz + (uint64_t)500000 * (prescale + 1)) / ((uint64_t)1000000 * (prescale + 1));
   return t > 4095 ? 4095 : (uint16_t)t;
@@ -24,13 +50,25 @@ bool Drive::begin() {
   Wire.beginTransmission(PCA9685_ADDR);
   ok_ = (Wire.endTransmission() == 0);
   if (ok_) {
-    pca.begin();
-    pca.setOscillatorFrequency(P.pca_osc_hz);
-    pca.setPWMFreq(50);  // RC サーボ / ESC は 50Hz
     // ライブラリと同じ式で分周比を覚えておく（writeMicroseconds は毎回 I2C で分周比を読み直し、
     // 読み損ねると全然違うパルスを出してしまう → ESC が勝手に動く原因になるので使わない）
     float pv = ((float)P.pca_osc_hz / (50 * 4096.0f)) + 0.5f - 1;
-    prescale_ = (uint8_t)constrain(pv, 3.0f, 255.0f);
+    const uint8_t want = (uint8_t)constrain(pv, 3.0f, 255.0f);
+    bool running = false;
+#if !defined(HOST_TEST)
+    // ESP32 だけが再起動したとき（USB の抜き挿し・書き込み・ポートを開いたとき）、PCA9685 はすでに
+    // 50Hz で信号を出している。ここでリセットすると信号が途切れ、ESC が「信号なし」で鳴るので、
+    // 設定が合っていればリセットせずにそのまま使う
+    uint8_t pre = 0, m1 = 0;
+    running = pcaRead8(PCA_PRESCALE, pre) && pcaRead8(PCA_MODE1, m1) && pre == want && !(m1 & MODE1_SLEEP) &&
+              (m1 & MODE1_AI);
+#endif
+    if (!running) {
+      pca.begin();
+      pca.setOscillatorFrequency(P.pca_osc_hz);
+      pca.setPWMFreq(50);  // RC サーボ / ESC は 50Hz
+    }
+    prescale_ = want;
   }
   outSteerUs_ = -1;
   outEscUs_ = -1;
@@ -142,14 +180,7 @@ bool Drive::pwmOut(uint8_t ch, int us) {
   return true;
 #else
   // PCA9685 のレジスタ LEDn_ON_L から 4 バイト（ON=0, OFF=ticks）を直接書き、I2C のエラー番号を残す
-  const uint16_t t = pcaUsToTicks(us, P.pca_osc_hz, prescale_);
-  Wire.beginTransmission(PCA9685_ADDR);
-  Wire.write((uint8_t)(0x06 + 4 * ch));
-  Wire.write((uint8_t)0);
-  Wire.write((uint8_t)0);
-  Wire.write((uint8_t)(t & 0xFF));
-  Wire.write((uint8_t)(t >> 8));
-  const uint8_t e = Wire.endTransmission();
+  const uint8_t e = pcaSet(ch, 0, pcaUsToTicks(us, P.pca_osc_hz, prescale_));
   if (e != 0) {
     i2cErrors_++;
     lastErrCode_ = e;  // 2 = アドレスに返事なし, 3 = データに返事なし, 4 = その他, 5 = 時間切れ
@@ -162,6 +193,17 @@ bool Drive::pwmOut(uint8_t ch, int us) {
 #endif
 }
 
+// 1 チャンネルの信号を止める（チャンネルを変えたとき、前のチャンネル用）
+void Drive::pwmOff(uint8_t ch) {
+#if USE_PCA9685
+#ifdef HOST_TEST
+  pca.setPWM(ch, 0, 4096);
+#else
+  pcaSet(ch, 0, 4096);
+#endif
+#endif
+}
+
 void Drive::write(uint32_t nowMs, bool force) {
   if (!force && nowMs - lastWrite_ < PWM_PERIOD_MS) return;
   lastWrite_ = nowMs;
@@ -171,8 +213,8 @@ void Drive::write(uint32_t nowMs, bool force) {
   if (!ok_) return;
   const int cs = P.ch_steer, ce = P.ch_esc;
   // チャンネルを変えたら、前のチャンネルの信号は止める（古い信号が出続けないように）
-  if (chSteer_ >= 0 && chSteer_ != cs && chSteer_ != ce) pca.setPWM(chSteer_, 0, 4096);
-  if (chEsc_ >= 0 && chEsc_ != ce && chEsc_ != cs) pca.setPWM(chEsc_, 0, 4096);
+  if (chSteer_ >= 0 && chSteer_ != cs && chSteer_ != ce) pwmOff(chSteer_);
+  if (chEsc_ >= 0 && chEsc_ != ce && chEsc_ != cs) pwmOff(chEsc_);
   if (cs != chSteer_ || ce != chEsc_) {
     outSteerUs_ = -1;
     outEscUs_ = -1;
