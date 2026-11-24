@@ -38,6 +38,7 @@ setup(
             # 調整用の道具
             'scan_check = agv_main.scan_check:main',
             'esp32_console = agv_main.esp32_console:main',
+            'wasd_teleop = agv_main.wasd_teleop:main',
         ],
     },
 )

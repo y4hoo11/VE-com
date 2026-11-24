@@ -161,6 +161,9 @@ bash edge_ai/scripts/start_robot.sh stop
 先に `source /workspace/ros2_ws/install/setup.bash` してから。
 teleop で走らせるときは PC1 の Nav2 を止めておく（両方から /cmd_vel が来るとぶつかる）。安全ガードは teleop でも効く。
 
+キーボードで動かすなら、ラズパイの `agv_robot` コンテナで `ros2 run agv_main wasd_teleop`（W/S = 前進/後退、A/D = ハンドル、スペース = 停止、+/- = 速さ、Q = 終わる）。
+標準の `teleop_twist_keyboard`（u i o / j k l / m , .）でもよい。
+
 ## 5. トピック（ROS 2）
 
 | トピック | 型 | 出す → 受ける |
