@@ -141,9 +141,21 @@ bool Drive::pwmOut(uint8_t ch, int us) {
   pca.writeMicroseconds(ch, us);
   return true;
 #else
-  bool ok = pca.setPWM(ch, 0, pcaUsToTicks(us, P.pca_osc_hz, prescale_)) == 0;
-  if (!ok) i2cErrors_++;
-  return ok;
+  // PCA9685 のレジスタ LEDn_ON_L から 4 バイト（ON=0, OFF=ticks）を直接書き、I2C のエラー番号を残す
+  const uint16_t t = pcaUsToTicks(us, P.pca_osc_hz, prescale_);
+  Wire.beginTransmission(PCA9685_ADDR);
+  Wire.write((uint8_t)(0x06 + 4 * ch));
+  Wire.write((uint8_t)0);
+  Wire.write((uint8_t)0);
+  Wire.write((uint8_t)(t & 0xFF));
+  Wire.write((uint8_t)(t >> 8));
+  const uint8_t e = Wire.endTransmission();
+  if (e != 0) {
+    i2cErrors_++;
+    lastErrCode_ = e;  // 2 = アドレスに返事なし, 3 = データに返事なし, 4 = その他, 5 = 時間切れ
+    lastErrCh_ = ch;
+  }
+  return e == 0;
 #endif
 #else
   return true;

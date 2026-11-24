@@ -23,6 +23,8 @@ class Drive {
   int steerUs() const { return steerUs_; }
   int escUs() const { return escUs_; }
   uint32_t i2cErrors() const { return i2cErrors_; }  // PCA9685 への書き込みに失敗した回数（配線ノイズの目安）
+  int lastErrCode() const { return lastErrCode_; }   // 最後の失敗の I2C エラー番号
+  int lastErrCh() const { return lastErrCh_; }       // 最後に失敗したチャンネル
 
  private:
   enum State { NORMAL, BRAKE, REV_ARM, REVERSE };
@@ -44,6 +46,8 @@ class Drive {
   int outEscUs_ = -1;
   uint32_t lastRefresh_ = 0;
   uint32_t i2cErrors_ = 0;
+  int lastErrCode_ = 0;
+  int lastErrCh_ = -1;
   bool pwmOut(uint8_t ch, int us);
 
   int thrToUs(int thrPm) const;

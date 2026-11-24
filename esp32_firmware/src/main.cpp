@@ -210,8 +210,8 @@ void loop() {
     // PCA9685 への書き込みの失敗が増えていたら知らせる（I2C の線のノイズ・接触不良の目安）
     static uint32_t lastErr = 0;
     if (drive.i2cErrors() != lastErr) {
-      char t[16];
-      snprintf(t, sizeof(t), "%lu", (unsigned long)drive.i2cErrors());
+      char t[40];
+      snprintf(t, sizeof(t), "%lu ch%d e%d", (unsigned long)drive.i2cErrors(), drive.lastErrCh(), drive.lastErrCode());
       alert("I2C_ERR", t);
       lastErr = drive.i2cErrors();
     }
