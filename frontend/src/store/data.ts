@@ -112,6 +112,7 @@ export interface Note {
   text: string;
   at: number;
   read: boolean;
+  level: Level; // 通知の種類（INFO = お知らせ / WARN = 警告 / ERROR = 異常）。設定 → 表示の「受け取る通知」で絞る
 }
 
 export interface User {

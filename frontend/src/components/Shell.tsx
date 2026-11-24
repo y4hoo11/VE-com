@@ -18,6 +18,7 @@ import {
   togglePop,
   useStore,
   veh,
+  visibleNotes,
 } from '../store/store';
 import { Battery, Btn, Tag, VChip } from './ui';
 import { cx, fmtDT, fmtNum, fmtPct, fmtT } from './uiUtils';
@@ -29,7 +30,7 @@ export function Header() {
   const s = useStore();
   const loc = useLocation();
   // 申請の通知は、対応が必要なもの（承認待ち・変更待ち）は対応するまで数え続ける
-  const unread = s.notes.filter((n) => !n.read).length + reqNotes().filter((n) => !n.read).length;
+  const unread = visibleNotes().filter((n) => !n.read).length + reqNotes().filter((n) => !n.read).length;
   const pop = (kind: 'conn' | 'bell' | 'user') => (e: MouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     togglePop({ kind, x: r.right, y: r.bottom + 6, right: true });
@@ -220,9 +221,14 @@ const NOTE_TONE = {
 };
 const NOTE_DOT = { amber: 'bg-amber-500', blue: 'bg-blue-600', red: 'bg-red-500', green: 'bg-green-600' };
 
+// 車両の通知の色（種類ごと）
+const LEVEL_TONE = { INFO: 'blue', WARN: 'amber', ERROR: 'red' } as const;
+
 function BellPop() {
   const s = useStore();
   const req = reqNotes();
+  const notes = visibleNotes();
+  const off = (['INFO', 'WARN', 'ERROR'] as const).filter((k) => !s.notify[k]).length;
   return (
     <div>
       <div className="mb-2 flex items-center">
@@ -232,7 +238,12 @@ function BellPop() {
           すべて既読にする
         </button>
       </div>
-      {!s.notes.length && !req.length && <div className="py-4 text-center text-slate-400">通知はありません</div>}
+      {!notes.length && !req.length && <div className="py-4 text-center text-slate-400">通知はありません</div>}
+      {off > 0 && (
+        <button type="button" className="mb-2 block w-full text-left text-xs text-slate-500 hover:underline" onClick={() => { closePop(); nav('/settings/display'); }}>
+          受け取らない種類があります（設定 → 表示）
+        </button>
+      )}
       {req.length > 0 && (
         <div className="mb-2 space-y-1 border-b border-slate-200 pb-2 dark:border-slate-700">
           <div className="text-xs font-bold text-slate-500">設定の申請</div>
@@ -259,7 +270,7 @@ function BellPop() {
         </div>
       )}
       <div className="max-h-80 space-y-1 overflow-auto">
-        {s.notes.slice(0, 12).map((n) => (
+        {notes.slice(0, 12).map((n) => (
           <button
             type="button"
             key={n.id}
@@ -268,10 +279,10 @@ function BellPop() {
               nav('/');
               openVehicle(n.vid);
             }}
-            className={cx('block w-full rounded-md px-2 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800', !n.read && 'bg-red-50 dark:bg-red-950/50')}
+            className={cx('block w-full rounded-md px-2 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800', !n.read && NOTE_TONE[LEVEL_TONE[n.level]])}
           >
             <div className={cx(!n.read && 'font-bold')}>
-              {!n.read && <span className="mr-1 inline-block h-2 w-2 rounded-full bg-red-500" />}
+              {!n.read && <span className={cx('mr-1 inline-block h-2 w-2 rounded-full', NOTE_DOT[LEVEL_TONE[n.level]])} />}
               {n.text}
             </div>
             <div className="text-xs text-slate-500">{fmtDT(n.at)}</div>

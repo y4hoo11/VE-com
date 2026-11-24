@@ -71,6 +71,13 @@ function Row({ label, hint, children }: { label: string; hint?: ReactNode; child
 // まだ動かない項目の目印（画面だけ先に用意している）
 const Soon = () => <Tag>準備中</Tag>;
 
+// 受け取る通知の種類（ベルに出すもの）。ログの重さ INFO / WARN / ERROR と対応
+const NOTIFY_KINDS = [
+  ['INFO', 'お知らせ', '地図の切り替え、申請の結果（不承認・変更済み）'],
+  ['WARN', '警告', 'オフラインになった、PC1 との接続が切れた、タスクの中止など'],
+  ['ERROR', '異常', '緊急停止、障害物で停止、自己位置の喪失、タスクの失敗など'],
+] as const;
+
 const THEMES = [
   ['light', 'ライト'],
   ['gray', 'グレイ'],
@@ -133,15 +140,21 @@ function Display() {
           </Btn>
         </div>
       </Row>
-      <Row label="受け取る通知">
-        <div className="flex items-center gap-4 text-sm text-slate-400">
-          {['お知らせ', '警告', '異常'].map((k) => (
-            <label key={k} className="flex items-center gap-1.5">
-              <input type="checkbox" disabled checked readOnly />
-              {k}
+      <Row
+        label="受け取る通知"
+        hint="ヘッダーのベルに出す種類です。外しても記録（ログ）には残り、オンに戻すとまた表示されます。承認待ちなど対応が必要な申請は、いつも表示します"
+      >
+        <div className="space-y-1.5 text-sm">
+          {NOTIFY_KINDS.map(([k, label, desc]) => (
+            <label key={k} className="flex items-start gap-1.5">
+              <input type="checkbox" className="mt-1" checked={s.notify[k]} onChange={(e) => set(() => (s.notify[k] = e.target.checked))} />
+              <span>
+                {label}
+                <span className="ml-2 text-xs text-slate-500">{desc}</span>
+              </span>
             </label>
           ))}
-          <Soon />
+          {!s.notify.ERROR && <div className="text-xs text-amber-700 dark:text-amber-400">「異常」を外している間は、異常の音も鳴りません（車両の赤い表示とお知らせ帯は出ます）</div>}
         </div>
       </Row>
     </Card>
