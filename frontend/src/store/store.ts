@@ -149,8 +149,11 @@ interface VehicleUpdate {
 const PREF_KEY = 'vecom_prefs';
 export type Theme = 'light' | 'gray' | 'dark';
 const THEMES: Theme[] = ['light', 'gray', 'dark'];
+// 地図を開いたときの表示倍率 [%]（100 = 地図の全体）
+export const MAP_ZOOMS = [100, 125, 150, 200] as const;
+export type MapZoom = (typeof MAP_ZOOMS)[number];
 // notify: 受け取る通知の種類（設定 → 表示）。INFO = お知らせ / WARN = 警告 / ERROR = 異常
-type Prefs = { theme: Theme; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; notify: Record<Level, boolean>; demo?: boolean };
+type Prefs = { theme: Theme; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; notify: Record<Level, boolean>; demo?: boolean; mapZoom?: MapZoom };
 export type OpsSettings = { battWarn: number; battMin: number };
 const loadPrefs = (): Partial<Prefs> => {
   try {
@@ -198,6 +201,7 @@ export const S = {
   view: { grid: false, path: true, labels: true, ...prefs.view },
  theme: (THEMES.includes(prefs.theme as Theme) ? prefs.theme : 'light') as Theme,
   sound: prefs.sound ?? true,
+  mapZoom: (MAP_ZOOMS.includes(prefs.mapZoom as MapZoom) ? prefs.mapZoom : 100) as MapZoom,
   notify: { INFO: true, WARN: true, ERROR: true, ...prefs.notify } as Record<Level, boolean>,
   // 運行の設定。battWarn・battMin はサーバー（GET /api/settings）から読む。maxSpeed・obstacle は表示だけ
   ops: { battWarn: 30, battMin: 20, maxSpeed: 5, obstacle: 0.45 }, // maxSpeed は km/h
@@ -249,7 +253,7 @@ export function useStore() {
 // 表示の設定をブラウザに保存する
 export function savePrefs() {
   try {
-    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound, notify: S.notify, demo: S.demo };
+    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound, notify: S.notify, demo: S.demo, mapZoom: S.mapZoom };
     localStorage.setItem(PREF_KEY, JSON.stringify(p));
   } catch {
     /* 保存できない環境では何もしない */

@@ -1,5 +1,7 @@
 // routes/index.ts
 import { Router } from 'express';
+import { readFileSync } from 'fs';
+import path from 'path';
 import { Role } from '@prisma/client';
 import { getVehicles, getVehicleById, createVehicle, updateVehicle, deleteVehicle, setVehicleTestOnline } from '../controllers/agvController';
 import { getTasks, getTaskById, createTask, assignTask, deleteTask, updateTask } from '../controllers/taskController';
@@ -11,6 +13,17 @@ import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 
+// サーバー（backend）の版。設定画面の「バージョン」に出す（src/routes でも dist/routes でも 2 つ上が backend）
+const SERVER_INFO = (() => {
+  let version = '不明';
+  try {
+    version = (JSON.parse(readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8')) as { version: string }).version;
+  } catch {
+    /* 読めなければ「不明」 */
+  }
+  return { version, node: process.version, startedAt: new Date().toISOString() };
+})();
+
 // 認証API（ログイン前に使うので、ここだけはトークン不要）
 router.post('/login', login);
 
@@ -18,6 +31,7 @@ router.post('/login', login);
 router.use(requireAuth);
 
 router.get('/me', getMe);
+router.get('/version', (_req, res) => res.json(SERVER_INFO)); // サーバーの版・Node.js の版・起動した日時
 router.put('/me/password', changeMyPassword); // 自分のパスワードの変更
 
 // ユーザー管理API（ADMIN のみ）

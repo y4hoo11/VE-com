@@ -9,3 +9,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// vite.config.ts の define で埋め込む値（設定画面の「バージョン」）
+declare const __APP_VERSION__: string;
+declare const __BUILD_TIME__: string; // 作った日時（開発サーバーでは起動した日時）。ISO 形式
+declare const __GIT_COMMIT__: string; // コミットの短いハッシュ。分からなければ空

@@ -1,50 +1,49 @@
 # =====================================================================
 #  地点（ウェイポイント）一覧  ※座標は maps/classroom.yaml（= Nav2 の map 座標） [m]
-#  部屋（横 5.0m x 縦 11.5m）の後ろ・左の角が (0, 0)。x = 右、y = 前（スクリーン側）
-#  【仮】地図の通れる場所から仮に置いた位置。実際に使う前に測り直してください
+#  部屋（横 14.0m x 縦 25.0m。推定の実寸 7.0m x 12.5m の2倍）の後ろ・左（窓側）の角が (0, 0)。x = 右、y = 前（スクリーン側）
+#  【仮】写真から作った地図の、通れる場所に置いた位置。実際に使う前に測り直してください
 #  （ros2 run agv_navigation check_waypoints --map maps/classroom.yaml で確認できます）
-#  車はその場で回れない（最小回転半径 0.6m）ので、前の方や机の間の狭い所には置いていない
 # =====================================================================
 waypoints:
-  - name: "Home"            # 後ろの真ん中
-    x: 2.30
-    y: 1.00
+  - name: "Home"            # 後ろの真ん中（ドアの前）
+    x: 7.00
+    y: 3.60
     theta_deg: 90
     charger: true
     aliases: ["home", "充電ステーション"]
 
-  - name: "Dock-A"          # 右の後ろの広い所
-    x: 3.20
-    y: 3.20
+  - name: "Dock-A"            # 後ろの右
+    x: 10.20
+    y: 3.80
     theta_deg: 90
     aliases: ["DockA", "入荷口A"]
 
-  - name: "Dock-B"          # 後ろの右（作業机の手前）
-    x: 3.60
-    y: 1.00
+  - name: "Dock-B"            # 後ろの左（窓側）
+    x: 3.80
+    y: 3.80
     theta_deg: 90
     aliases: ["DockB", "入荷口B"]
 
-  - name: "A13"             # 中央の通路のまん中
-    x: 2.42
-    y: 6.80
+  - name: "A13"            # 中央の通路のまん中
+    x: 7.00
+    y: 12.80
     theta_deg: 90
     aliases: ["棚A13"]
 
-  - name: "Station-1"       # 中央の通路の前の方
-    x: 2.42
-    y: 9.00
+  - name: "Station-1"            # 前の真ん中（プロジェクターの手前）
+    x: 7.00
+    y: 20.00
     theta_deg: 90
     aliases: ["Station1", "1", "部屋"]
 
-  - name: "Station-2"       # 右の列のいちばん後ろの机の手前
-    x: 3.70
-    y: 4.30
+  - name: "Station-2"            # 前の右（ドアの近く）
+    x: 10.20
+    y: 20.80
     theta_deg: 90
     aliases: ["Station2", "2"]
 
-  - name: "Station-3"       # 後ろの左
-    x: 1.00
-    y: 1.00
-    theta_deg: 180
+  - name: "Station-3"            # 前の左（教卓の手前）
+    x: 3.80
+    y: 20.80
+    theta_deg: 90
     aliases: ["Station3", "3"]

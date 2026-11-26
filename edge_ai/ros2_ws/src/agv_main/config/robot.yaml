@@ -27,8 +27,8 @@
     vehicle:
       wheelbase: 0.257             # ホイールベース [m]
       max_steer_deg: 25.0          # steer=1.0 のときの実舵角 [deg]（実測して合わせる）
-      length: 0.42                 # 全長 [m]
-      width: 0.19                  # 全幅 [m]
+      length: 0.45                 # 全長 [m]（実車の実測 45cm）
+      width: 0.20                  # 全幅 [m]（実車の実測 20cm）
 
     # ---- 速度モデル（エンコーダが無いので「スロットル→速度」を実測で決める）----
     #  v[m/s] = gain_mps * (|throttle| - deadband)

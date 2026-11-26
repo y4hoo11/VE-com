@@ -26,15 +26,6 @@ function AgvIcon({ color }: { color: string }) {
   );
 }
 
-// 地図の座標 [m]（Nav2 の map 座標。左下が origin）→ SVG の座標（1m = 100、上が 0）
-const W = MAP.width * 100;
-const H = MAP.height * 100;
-const X = (x: number) => (x - MAP.originX) * 100;
-const Y = (y: number) => (MAP.originY + MAP.height - y) * 100;
-// 方眼（1m ごと）を引く位置
-const GRID_X = Array.from({ length: Math.floor(MAP.width) + 1 }, (_, i) => Math.ceil(MAP.originX) + i).filter((k) => k > MAP.originX && k < MAP.originX + MAP.width);
-const GRID_Y = Array.from({ length: Math.floor(MAP.height) + 1 }, (_, i) => Math.ceil(MAP.originY) + i).filter((k) => k > MAP.originY && k < MAP.originY + MAP.height);
-
 // 表示範囲（SVG の viewBox）。FULL が全体表示
 type View = { x: number; y: number; w: number; h: number };
 const MAX_ZOOM = 8;
@@ -84,12 +75,15 @@ export function MapView({ mapKey, focusId, wpSel, onWpClick }: Props) {
   const mm = mapKey === 'wp' ? null : s.mapMode;
   const map = MAP;
   const { W, H, X, Y, GRID_X, GRID_Y, full: FULL, k: K } = useMemo(() => geometry(map), [map]);
-  const [view, setView] = useState<View>(FULL);
-  // 地図が変わったら全体表示に戻す
-  const [viewMap, setViewMap] = useState(map.id);
-  if (viewMap !== map.id) {
-    setViewMap(map.id);
-    setView(FULL);
+  // 開いたときの表示：設定「地図の表示倍率」の倍率で、地図の中心を拡大（100% = 全体）
+  const START = useMemo(() => zoomView(FULL, FULL, s.mapZoom / 100, FULL.x + FULL.w / 2, FULL.y + FULL.h / 2), [FULL, s.mapZoom]);
+  const [view, setView] = useState<View>(START);
+  // 地図や表示倍率の設定が変わったら、開いたときの表示に戻す
+  const viewKey = `${map.id}:${s.mapZoom}`;
+  const [viewFor, setViewFor] = useState(viewKey);
+  if (viewFor !== viewKey) {
+    setViewFor(viewKey);
+    setView(START);
   }
   const pan = useRef<{ px: number; py: number; v: View; scale: number } | null>(null);
   const zoomed = view.w < FULL.w - 0.5;

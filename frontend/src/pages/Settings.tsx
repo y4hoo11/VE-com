@@ -1,10 +1,11 @@
 // 設定：左にメニュー。一覧はページ内、追加・編集はモーダル。項目の分類は setting_classification.xlsx に合わせる
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useParams } from 'react-router-dom';
 import { approvalsOf, fmtSetting, isOpenReq, needApprovals, RANKS, REQ_STATUS, SETTING_ITEMS, settingItem, ST, valueError, type ChangeRequest, type Rank, type SettingItem } from '../store/data';
-import { askDeleteUser, askDeleteVehicle, emit, openModal, playAlarm, reqNotes, restartDemo, savePrefs, setDemoMode, setTestOnline, submitChangeRequest, toast, useStore, withdrawRequest } from '../store/store';
+import { askDeleteUser, askDeleteVehicle, emit, MAP_ZOOMS, openModal, playAlarm, reqNotes, restartDemo, savePrefs, setDemoMode, setTestOnline, submitChangeRequest, toast, useStore, withdrawRequest, type MapZoom } from '../store/store';
 import { Btn, Card, FormRow, inputCls, Kv, LockIcon, RankBadge, RankLegend, ReqChip, Tag, ValueInput, VChip } from '../components/ui';
 import { cx, fmtDT, fmtT } from '../components/uiUtils';
+import { api } from '../services/api';
 import { SettingApprovals } from './SettingApprovals';
 
 // 【仮】デモ中は、サーバーに送る操作（ユーザー管理・パスワード変更）を止める
@@ -69,7 +70,6 @@ function Row({ label, hint, children }: { label: string; hint?: ReactNode; child
 }
 
 // まだ動かない項目の目印（画面だけ先に用意している）
-const Soon = () => <Tag>準備中</Tag>;
 
 // 受け取る通知の種類（ベルに出すもの）。ログの重さ INFO / WARN / ERROR と対応
 // 説明は「！」を押している間だけ出す（説明のない種類には「！」を出さない）
@@ -134,13 +134,22 @@ function Display() {
     ))}
   </div>
 </Row>
-      <Row label="表示言語">
-        <div className="flex items-center gap-2">
-          <select disabled className={cx(inputCls, 'w-40!')} value="ja">
-            <option value="ja">日本語</option>
-          </select>
-          <Soon />
-        </div>
+      <Row label="表示言語" hint="この画面は日本語のみに対応しています">
+        <span className="text-sm">日本語</span>
+      </Row>
+      <Row label="地図の表示倍率" hint="地図を開いたときの拡大の度合い（中心を基準）。地図の右下の ＋ － ⤢ で、その場で変えることもできます">
+        <select
+          aria-label="地図の表示倍率"
+          className={cx(inputCls, 'w-40!')}
+          value={s.mapZoom}
+          onChange={(e) => set(() => (s.mapZoom = Number(e.target.value) as MapZoom))}
+        >
+          {MAP_ZOOMS.map((z) => (
+            <option key={z} value={z}>
+              {z}%{z === 100 ? '（全体）' : ''}
+            </option>
+          ))}
+        </select>
       </Row>
       <Row label="地図に表示するもの">
         <div className="flex gap-4 text-sm">
@@ -394,6 +403,43 @@ function Users() {
   );
 }
 
+// 画面（ビルド時に埋め込んだ値）とサーバー（GET /api/version）の版
+type ServerInfo = { version: string; node: string; startedAt: string };
+function Versions() {
+  const s = useStore();
+  const [server, setServer] = useState<ServerInfo | null | 'error'>(null);
+  useEffect(() => {
+    if (s.demo) return;
+    let alive = true;
+    api
+      .get<ServerInfo>('/version')
+      .then((r) => alive && setServer(r.data))
+      .catch(() => alive && setServer('error'));
+    return () => {
+      alive = false;
+    };
+  }, [s.demo, s.server]);
+  const built = new Date(__BUILD_TIME__);
+  const serverText = s.demo
+    ? 'デモモード中は取得しません'
+    : server === 'error'
+      ? '取得できません（サーバーにつながっていません）'
+      : server
+        ? `v${server.version}（Node.js ${server.node}・${fmtDT(new Date(server.startedAt).getTime())} に起動）`
+        : '取得中…';
+  return (
+    <Card title="バージョン" bodyClass="p-5">
+      <Kv
+        rows={[
+          ['画面', `v${__APP_VERSION__}（${fmtDT(built.getTime())} に作成${__GIT_COMMIT__ ? `・コミット ${__GIT_COMMIT__}` : ''}）`],
+          ['サーバー', serverText],
+          ['通信仕様', 'docs/agv_protocol.md'],
+        ]}
+      />
+    </Card>
+  );
+}
+
 function System() {
   const s = useStore();
   const ok = (b: boolean, t = '正常', f = '切断') => <span className={b ? 'text-green-600' : 'font-bold text-red-600'}>● {b ? t : f}</span>;
@@ -420,6 +466,7 @@ function System() {
           </tbody>
         </table>
       </Card>
+      <Versions />
     </div>
   );
 }
