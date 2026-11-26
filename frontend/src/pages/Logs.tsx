@@ -1,6 +1,6 @@
 // 記録：絞り込みつきのログ一覧（サーバーで絞り込み・ページ送り）。行をクリックするとドロワーで詳細
 import { useEffect, useRef, useState } from 'react';
-import type { Level, Log } from '../store/data';
+import { LEVEL_JA, type Level, type Log } from '../store/data';
 import { api } from '../services/api';
 import { keepLogs, openLog, toast, toLog, useStore, type ApiLog } from '../store/store';
 import { Btn, Card, inputCls, LvChip } from '../components/ui';
@@ -13,7 +13,7 @@ const CSV_MAX = 100_000; // CSV 出力の上限（ブラウザが重くならな
 type Period = 'hour' | 'day' | 'week' | 'custom' | 'all';
 type Filter = { vid: string; lv: Record<Level, boolean>; period: Period; from: string; to: string; q: string };
 
-// 画面の条件 → GET /api/logs のクエリ。どのレベルも選ばれていなければ null（取得しない）
+// 画面の条件 → GET /api/logs のクエリ。どの分類も選ばれていなければ null（取得しない）
 function toParams(f: Filter): Record<string, string> | null {
   const levels = (Object.keys(f.lv) as Level[]).filter((l) => f.lv[l]);
   if (!levels.length) return null;
@@ -73,7 +73,7 @@ export function Logs() {
   const refreshKey = page === 0 ? newest : 0;
   const requestKey = `${key}|${page}|${refreshKey}`;
 
-  // どのレベルも選ばれていなければ、取得せず空で表示する
+  // どの分類も選ばれていなければ、取得せず空で表示する
   const noLevel = !Object.values(lv).some(Boolean);
   const list = noLevel ? [] : fetchedList;
   const total = noLevel ? 0 : fetchedTotal;
@@ -145,7 +145,7 @@ export function Logs() {
           {(['INFO', 'WARN', 'ERROR'] as Level[]).map((l) => (
             <label key={l} className="flex items-center gap-1">
               <input type="checkbox" checked={lv[l]} onChange={(e) => setLv({ ...lv, [l]: e.target.checked })} />
-              {l}
+              {LEVEL_JA[l]}
             </label>
           ))}
         </div>
@@ -177,7 +177,7 @@ export function Logs() {
           <thead className="sticky top-0 bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800">
             <tr>
               <th className="w-44 px-4 py-2">日時</th>
-              <th className="w-20 py-2">レベル</th>
+              <th className="w-20 py-2">分類</th>
               <th className="w-28 py-2">車両</th>
               <th className="py-2">メッセージ</th>
               <th className="w-16 py-2" />
@@ -231,7 +231,7 @@ function downloadCsv(list: Log[], vehicles: { id: string; name: string }[]) {
   if (!list.length) return toast('出力するログがありません', 'warn');
   const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = [
-    ['日時', 'レベル', '車両ID', '車両名', 'メッセージ', '詳細'],
+    ['日時', '分類', '車両ID', '車両名', 'メッセージ', '詳細'],
     ...list.map((l) => [
       new Date(l.at).toLocaleString('ja-JP'),
       l.level,

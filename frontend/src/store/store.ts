@@ -152,7 +152,8 @@ const THEMES: Theme[] = ['light', 'gray', 'dark'];
 // 地図を開いたときの表示倍率 [%]（100 = 地図の全体）
 export const MAP_ZOOMS = [100, 125, 150, 200] as const;
 export type MapZoom = (typeof MAP_ZOOMS)[number];
-type Prefs = { theme: Theme; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; demo?: boolean; mapZoom?: MapZoom };
+// notify: 受け取る通知の種類（設定 → 表示）。INFO = お知らせ / WARN = 警告 / ERROR = 異常
+type Prefs = { theme: Theme; view: { grid: boolean; path: boolean; labels: boolean }; sound: boolean; notify: Record<Level, boolean>; demo?: boolean; mapZoom?: MapZoom };
 export type OpsSettings = { battWarn: number; battMin: number };
 const loadPrefs = (): Partial<Prefs> => {
   try {
@@ -201,6 +202,7 @@ export const S = {
  theme: (THEMES.includes(prefs.theme as Theme) ? prefs.theme : 'light') as Theme,
   sound: prefs.sound ?? true,
   mapZoom: (MAP_ZOOMS.includes(prefs.mapZoom as MapZoom) ? prefs.mapZoom : 100) as MapZoom,
+  notify: { INFO: true, WARN: true, ERROR: true, ...prefs.notify } as Record<Level, boolean>,
   // 運行の設定。battWarn・battMin はサーバー（GET /api/settings）から読む。maxSpeed・obstacle は表示だけ
   ops: { battWarn: 30, battMin: 20, maxSpeed: 5, obstacle: 0.45 }, // maxSpeed は km/h
   // 申請できる設定項目の今の値（GET /api/settings の values）
@@ -251,7 +253,7 @@ export function useStore() {
 // 表示の設定をブラウザに保存する
 export function savePrefs() {
   try {
-    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound, demo: S.demo, mapZoom: S.mapZoom };
+    const p: Prefs = { theme: S.theme, view: S.view, sound: S.sound, notify: S.notify, demo: S.demo, mapZoom: S.mapZoom };
     localStorage.setItem(PREF_KEY, JSON.stringify(p));
   } catch {
     /* 保存できない環境では何もしない */
@@ -270,6 +272,15 @@ export const nav = (path: string) => {
   window.location.hash = '#' + path;
 };
 const ms = (s: string | null | undefined) => (s ? Date.parse(s) : null);
+
+// ---- 通知（ヘッダーのベル）----
+// 受け取る種類（設定 → 表示）で絞ったもの。消してはいないので、種類をオンに戻すとまた出る
+export const visibleNotes = () => S.notes.filter((n) => S.notify[n.level]);
+
+function addNote(vid: string, text: string, level: Level, at = now()) {
+  S.notes.unshift({ id: S.seq.note++, vid, text, at, read: false, level });
+  if (S.notes.length > 200) S.notes.length = 200;
+}
 
 // まだバックエンドに無い機能
 export const NOT_SUPPORTED = '未対応です';
@@ -572,7 +583,7 @@ function listen() {
     if (u.batteryLevel !== undefined) v.battery = u.batteryLevel;
     if (u.currentMapId && u.currentMapId !== v.mapId) {
       // 別の地図に変わったら通知する（最初に分かったときは通知しない）
-      if (v.mapId) S.notes.unshift({ id: S.seq.note++, vid: v.id, text: `${v.name}: 地図が ${v.mapId} から ${u.currentMapId} に変わりました`, at: now(), read: false });
+      if (v.mapId) addNote(v.id, `${v.name}: 地図が ${v.mapId} から ${u.currentMapId} に変わりました`, 'INFO');
       v.mapId = u.currentMapId;
     }
     if (u.currentX != null) v.x = u.currentX;
@@ -643,14 +654,18 @@ function listen() {
     if (mapState !== null) {
       if (l.vid && mapState !== 'CHANGED') {
         const v = veh(l.vid);
-        S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
+        addNote(l.vid, `${v?.name ?? l.vid}: ${l.message}`, l.level, l.at);
       }
     } else if (l.level === 'ERROR' && l.vid) {
       const v = veh(l.vid);
-      S.notes.unshift({ id: S.seq.note++, vid: l.vid, text: `${v?.name ?? l.vid}: ${l.message}`, at: l.at, read: false });
-      if (S.sound) playAlarm();
+      addNote(l.vid, `${v?.name ?? l.vid}: ${l.message}`, 'ERROR', l.at);
+      if (S.sound && S.notify.ERROR) playAlarm(); // 「異常」を受け取らない設定なら音も鳴らさない
       // 異常の理由をログで補う（vehicle:update より後に届いた場合）
       if (v && v.status === 'ERROR' && v.err?.code === 'UNKNOWN') makeErr(v);
+    } else if (l.level === 'WARN' && l.vid) {
+      // 警告（オフラインになった・PC1 との接続が切れた・タスクの中止など）
+      const v = veh(l.vid);
+      addNote(l.vid, `${v?.name ?? l.vid}: ${l.message}`, 'WARN', l.at);
     }
     emit();
   });
@@ -1283,6 +1298,8 @@ export function reqNotes(): ReqNote[] {
   const out: ReqNote[] = [];
   for (const r of S.requests) {
     const add = (tone: ReqNote['tone'], text: string, link: string, at: number, action = false) => {
+      // 結果の知らせ（不承認・変更済み）は「お知らせ」。対応が必要なもの（承認待ち・変更待ち）は設定にかかわらず出す
+      if (!action && !S.notify.INFO) return;
       const key = `${r.id}:${r.status}`;
       out.push({ key, text, at, tone, link, action, read: action ? false : S.reqRead.has(key) });
     };
