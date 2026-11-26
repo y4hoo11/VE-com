@@ -10,6 +10,7 @@ import { login } from '../controllers/authController';
 import { getSettings, getChangeRequests, createChangeRequest, reviewChangeRequest, withdrawChangeRequest, applyChangeRequest, directChange } from '../controllers/changeRequestController';
 import { getUsers, createUser, updateUser, deleteUser, getMe, changeMyPassword } from '../controllers/userController';
 import { requireAuth, requireRole } from '../middleware/auth';
+import { autoDispatchService } from '../services/autoDispatchService';
 
 const router = Router();
 
@@ -56,6 +57,18 @@ router.post('/tasks/assign', canOperate, assignTask);
 router.get('/tasks/:id', getTaskById);
 router.delete('/tasks/:id', canOperate, deleteTask); // 未割当・割当済は取り消し、実行中は中止（CANCEL_TASK）
 router.patch('/tasks/:id', canOperate, updateTask);
+
+// 自動割り当て（ON/OFF は設定「自動割り当て」）。状態を見る・いますぐ1回走らせる
+router.get('/dispatch/auto', (_req, res) => res.json(autoDispatchService.status()));
+router.post('/dispatch/auto/run', canOperate, async (_req, res) => {
+  try {
+    const assigned = await autoDispatchService.runNow();
+    res.json({ assigned, ...autoDispatchService.status() });
+  } catch (e) {
+    console.error('自動割り当てエラー:', e);
+    res.status(500).json({ error: '自動割り当てに失敗しました' });
+  }
+});
 
 // ログAPI
 router.get('/logs', getLogs);

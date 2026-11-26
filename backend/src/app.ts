@@ -7,6 +7,7 @@ import routes from './routes';
 import { socketService } from './services/socketService';
 import { mqttService } from './services/mqttService';
 import { heartbeatService } from './services/heartbeatService';
+import { autoDispatchService } from './services/autoDispatchService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -39,6 +40,7 @@ app.use('/api', routes);
 socketService.init(httpServer);
 mqttService.init();
 heartbeatService.start();
+autoDispatchService.start();
 
 const PORT = process.env.PORT || 3001;
 

@@ -1,10 +1,13 @@
 // controllers/taskController.ts
 import { Request, Response } from 'express';
 import { prisma } from '../config/database';
-import { dispatchService } from '../services/dispatchService';
+import { AssignConflictError, dispatchService } from '../services/dispatchService';
 import { socketService } from '../services/socketService';
 import { mqttService } from '../services/mqttService';
 import { manualDriveService } from '../services/manualDriveService';
+import { autoDispatchService } from '../services/autoDispatchService';
+import { vehicleBlocker } from '../services/autoDispatchPlan';
+import { requestDispatch } from '../services/dispatchTrigger';
 import { TaskStatus, VehicleStatus, LogLevel } from '@prisma/client';
 import { loadOpsSettings } from './settingsController';
  
@@ -60,7 +63,8 @@ export const getTasks = async (req: Request, res: Response) => {
         },
       },
     });
-    res.json(tasks);
+    // 割り当て待ちのタスクには、自動割り当てがまだ割り当てていない理由を付ける（無ければ null）
+    res.json(tasks.map((t) => ({ ...t, autoDispatchNote: t.status === TaskStatus.PENDING ? autoDispatchService.noteFor(t.id) : null })));
   } catch (error) {
     console.error('タスク一覧取得エラー:', error);
     res.status(500).json({ error: 'タスク一覧の取得に失敗しました' });
@@ -69,7 +73,7 @@ export const getTasks = async (req: Request, res: Response) => {
  
 export const createTask = async (req: Request, res: Response) => {
   try {
-    const { title, name, startLocation, targetLocation, priority, scheduledAt, createdByUserId } =
+    const { title, name, startLocation, targetLocation, priority, scheduledAt, createdByUserId, autoAssign } =
       req.body ?? {};
  
     const taskTitle = getStringParam(title) || getStringParam(name);
@@ -105,6 +109,7 @@ export const createTask = async (req: Request, res: Response) => {
           targetLocation: tLocation,
           priority: normalizePriority(priority),
           scheduledAt: validScheduledAt,
+          autoAssign: autoAssign !== false, // 送られてこなければ自動割り当ての対象
           createdByUserId: userId,
           status: TaskStatus.PENDING,
         },
@@ -124,6 +129,7 @@ export const createTask = async (req: Request, res: Response) => {
  
     socketService.broadcastTasksChanged();
     res.status(201).json(result);
+    requestDispatch('タスクの作成');
   } catch (error) {
     console.error('タスク作成エラー:', error);
     res.status(500).json({ error: 'タスクの作成に失敗しました' });
@@ -219,6 +225,7 @@ export const deleteTask = async (req: Request, res: Response) => {
     }
 
     socketService.broadcastTasksChanged();
+    if (outcome.releasedVehicle) requestDispatch('タスクの中止で車両が空いた');
     res.status(200).json({
       message: outcome.vehicleId ? 'タスクを中止しました' : 'タスクをキャンセル（削除）しました',
       ...(warning ? { warning } : {}),
@@ -278,28 +285,26 @@ export const assignTask = async (req: Request, res: Response) => {
     if (t.status !== TaskStatus.PENDING) {
       return res.status(409).json({ error: 'このタスクは割り当て待ちではありません' });
     }
-    if (v.status === VehicleStatus.OFFLINE) {
-      return res.status(409).json({ error: 'この車両はオフラインのため割り当てられません' });
-    }
-    if (v.status === VehicleStatus.ERROR) {
-      return res.status(409).json({ error: 'この車両は異常中のため割り当てられません' });
-    }
+    // 割り当てられない理由（自動割り当てと同じ判定。autoDispatchPlan.ts の vehicleBlocker）
     const busy = await prisma.task.count({
       where: { assignedVehicleId: vId, status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] } },
     });
-    if (busy > 0) {
-      return res.status(409).json({ error: 'この車両は別のタスクを実行中です' });
-    }
-    if (manualDriveService.isDriving(vId)) {
-      return res.status(409).json({ error: 'この車両は手動操縦中のため割り当てられません' });
-    }
-    if (v.batteryLevel < ops.battMin) {
-      return res.status(409).json({ error: `電池残量が ${ops.battMin}% 未満のため割り当てられません` });
+    const ng = vehicleBlocker(v, {
+      battMin: ops.battMin,
+      busyVehicleIds: new Set(busy > 0 ? [vId] : []),
+      manualVehicleIds: new Set(manualDriveService.isDriving(vId) ? [vId] : []),
+    });
+    if (ng) {
+      return res.status(409).json({ error: `この車両は${ng}のため割り当てられません` });
     }
 
-    const updatedTask = await dispatchService.assignTask(tId, vId);
+    const updatedTask = await dispatchService.assignTask(tId, vId, { source: 'manual' });
     res.json(updatedTask);
   } catch (error) {
+    // 確かめたあとに、別の割り当て・中止が先に通った
+    if (error instanceof AssignConflictError) {
+      return res.status(409).json({ error: error.message });
+    }
     console.error('配車処理エラー:', error);
     res.status(500).json({ error: '配車処理に失敗しました' });
   }
@@ -322,7 +327,7 @@ export const updateTask = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'タスクIDは必須です' });
     }
 
-    const { title, priority, startLocation, targetLocation, scheduledAt, status, userId } =
+    const { title, priority, startLocation, targetLocation, scheduledAt, status, userId, autoAssign } =
       req.body ?? {};
 
     // 内容の変更項目（指定されたものだけ更新する）
@@ -332,6 +337,7 @@ export const updateTask = async (req: Request, res: Response) => {
       startLocation?: string | null;
       targetLocation?: string | null;
       scheduledAt?: Date | null;
+      autoAssign?: boolean;
     } = {};
 
     if (title !== undefined) {
@@ -348,10 +354,14 @@ export const updateTask = async (req: Request, res: Response) => {
       } else {
         const d = new Date(String(scheduledAt));
         if (Number.isNaN(d.getTime())) {
-          return res.status(400).json({ error: '期限 (scheduledAt) の形式が不正です' });
+          return res.status(400).json({ error: '予定日時 (scheduledAt) の形式が不正です' });
         }
         contentData.scheduledAt = d;
       }
+    }
+    if (autoAssign !== undefined) {
+      if (typeof autoAssign !== 'boolean') return res.status(400).json({ error: 'autoAssign は true か false です' });
+      contentData.autoAssign = autoAssign;
     }
 
     let nextStatus: TaskStatus | undefined;
@@ -455,6 +465,7 @@ export const updateTask = async (req: Request, res: Response) => {
       socketService.broadcastVehicleUpdate({ id: outcome.releasedVehicleId, status: VehicleStatus.IDLE });
     }
     res.json(outcome.task);
+    requestDispatch('タスクの更新'); // 内容の変更（予定日時・自動割り当ての対象）や、車両が空いたとき
   } catch (error) {
     console.error('タスク更新エラー:', error);
     res.status(500).json({ error: 'タスクの更新に失敗しました' });

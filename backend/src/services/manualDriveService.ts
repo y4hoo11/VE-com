@@ -13,6 +13,7 @@ import { LogLevel, Role, TaskStatus, VehicleStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { mqttService } from './mqttService';
 import { emergencyState } from './emergencyState';
+import { requestDispatch } from './dispatchTrigger';
 import type { AuthUser } from '../types/express';
 
 export const MAX_LINEAR = 0.3; // m/s（前後の速さの上限）
@@ -97,6 +98,7 @@ class ManualDriveService {
     this.send(s.vehicleId, 0, 0);
     const why = reason ? `${reason}・` : '';
     this.log(s.vehicleId, LogLevel.INFO, `手動操縦を終了しました（${why}操作: ${s.username}）`).catch(() => {});
+    requestDispatch('手動操縦の終了');
   }
 
   /** 「操縦を始める」を押した */

@@ -5,6 +5,7 @@ import { VehicleStatus, LogLevel } from '@prisma/client';
 import type { VehicleClearancePayload, VehicleTelemetryExtra } from '../types';
 import { taskProgressService } from './taskProgressService';
 import { emergencyState } from './emergencyState';
+import { requestDispatch } from './dispatchTrigger';
 
 // 受信するトピック（docs/agv_protocol.md 2-2〜2-7, 2-9）
 const TOPICS = ['agv/+/telemetry', 'agv/+/emergency', 'agv/+/task', 'agv/+/path', 'agv/+/online', 'agv/+/clearance', 'agv/+/map'];
@@ -173,6 +174,8 @@ class MqttService {
           if (backOnline) {
             await socketService.recordLog(agvId, LogLevel.INFO, '通信が戻ったため、オンラインに戻しました');
           }
+          // 待機・充電中になった（空いた）車両があれば、割り当て待ちのタスクを渡す
+          if (prev?.status !== updatedVehicle.status) requestDispatch('車両の状態の変化');
 
         } else if (topic.endsWith('/emergency')) {
           const reason = message.reason || '障害物接近による緊急制動';

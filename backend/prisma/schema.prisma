@@ -95,7 +95,9 @@ model Task {
   startLocation     String?    @map("start_location")
   targetLocation    String?    @map("target_location")
   createdByUserId   String?    @map("created_by_user_id")
-  scheduledAt       DateTime?  @map("scheduled_at")
+  scheduledAt       DateTime?  @map("scheduled_at") // 予定日時。自動割り当てはこの時刻になってから
+  // false = 自動割り当ての対象にしない（人が割り当てる）
+  autoAssign        Boolean    @default(true) @map("auto_assign")
   startedAt         DateTime?  @map("started_at")
   completedAt       DateTime?  @map("completed_at")
   createdAt         DateTime   @default(now()) @map("created_at")
