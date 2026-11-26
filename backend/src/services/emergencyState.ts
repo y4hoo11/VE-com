@@ -51,6 +51,15 @@ class EmergencyState {
     if (!set.size) this.codes.delete(vehicleId);
   }
 
+  /**
+   * 解除が必要な原因（緊急停止・原因不明）を覚えているか（メモリだけを見る）。
+   * Web から緊急停止した直後は、ROS から ERROR が返るまで DB の status が変わらないので、割り当てではこれも見る
+   */
+  hasLatched(vehicleId: string) {
+    const set = this.codes.get(vehicleId);
+    return !!set && [...set].some((c) => !RECOVERABLE.has(c));
+  }
+
   /** ERROR 中でも、現在地の設定・手動操縦を送ってよいか */
   async isRecoverable(vehicleId: string) {
     const set = this.codes.get(vehicleId) ?? (await this.loadFromLogs(vehicleId));

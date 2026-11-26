@@ -51,6 +51,7 @@ type DemoTask = {
   startLocation: string;
   targetLocation: string;
   scheduledAt: string | null;
+  autoAssign: boolean;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -119,6 +120,7 @@ function makeTask(title: string, start: string, target: string, priority: number
     startLocation: start,
     targetLocation: target,
     scheduledAt: null,
+    autoAssign: true,
     startedAt: null,
     completedAt: null,
     createdAt: iso(createdAt),
@@ -405,6 +407,58 @@ function tick() {
     }
     if (busy || tickCount % 5 === 0) sendUpdate(v);
   }
+  if (tickCount % 15 === 0) autoDispatch(); // 3 秒ごと（サーバーの見回りと同じ）
+}
+
+// ---------------------------------------------------------------
+// 自動割り当て（backend/src/services/autoDispatchPlan.ts と同じ決め方を短くしたもの）
+// ---------------------------------------------------------------
+let autoNotes = new Map<string, string>();
+function autoDispatch() {
+  const before = JSON.stringify([...autoNotes]);
+  autoNotes = new Map();
+  if (allValues().autoDispatch === 'ON') {
+    const now = Date.now();
+    const sched = (t: DemoTask) => (t.scheduledAt ? Date.parse(t.scheduledAt) : Infinity);
+    const pending = tasks
+      .filter((t) => t.status === 'PENDING' && t.autoAssign)
+      .sort((a, b) => b.priority - a.priority || sched(a) - sched(b) || Date.parse(a.createdAt) - Date.parse(b.createdAt));
+    const used = new Set<string>();
+    for (const t of pending) {
+      if (sched(t) > now) {
+        autoNotes.set(t.id, '予定日時になったら割り当てます');
+        continue;
+      }
+      if (!wpByName(t.startLocation) || !wpByName(t.targetLocation)) {
+        autoNotes.set(t.id, `${wpByName(t.startLocation) ? '目的地' : '出発地'}が地図 ${DEFAULT_MAP_ID} にありません`);
+        continue;
+      }
+      const s = wpPt(t.startLocation);
+      const free = vehicles.filter(
+        (v) =>
+          !used.has(v.id) &&
+          v.mapId === DEFAULT_MAP_ID &&
+          (v.status === 'IDLE' || (v.status === 'CHARGING' && v.battery >= ops.battWarn)) &&
+          !v.taskId &&
+          v.mode !== 'GOTO' &&
+          !v.manual &&
+          v.battery >= ops.battMin,
+      );
+      const dist = (v: DemoVehicle) => Math.hypot(v.x - s.x, v.y - s.y);
+      const best = free.sort((a, b) => dist(a) - dist(b) || b.battery - a.battery)[0];
+      if (!best) {
+        autoNotes.set(t.id, '空いている車両がありません');
+        continue;
+      }
+      const r = assignTask({ taskId: t.id, vehicleId: best.id }, `自動割り当て: ${best.name} に割り当てました（${t.startLocation} まで約 ${dist(best).toFixed(1)} m、電池 ${Math.round(best.battery)}%）`);
+      if (r.status >= 400) {
+        autoNotes.set(t.id, '割り当てを決め直しています'); // その車両は使わずに、次の回で決め直す
+        continue;
+      }
+      used.add(best.id);
+    }
+  }
+  if (JSON.stringify([...autoNotes]) !== before) fire('tasks:changed');
 }
 
 // ---------------------------------------------------------------
@@ -609,7 +663,7 @@ function getLogs(params: Record<string, unknown>): Result {
   return { status: 200, data: list.slice(offset, offset + limit), headers: { 'x-total-count': String(list.length) } };
 }
 
-function assignTask(body: Record<string, unknown>): Result {
+function assignTask(body: Record<string, unknown>, note?: string): Result {
   const t = tasks.find((x) => x.id === body.taskId);
   const v = vehicles.find((x) => x.id === body.vehicleId);
   if (!t) return fail(404, 'タスクが見つかりません');
@@ -623,7 +677,7 @@ function assignTask(body: Record<string, unknown>): Result {
 
   t.assignedVehicleId = v.id;
   t.progress = 0;
-  setTaskStatus(t, 'ASSIGNED', `${v.name} に割り当てました`);
+  setTaskStatus(t, 'ASSIGNED', note ?? `${v.name} に割り当てました`);
   v.taskId = t.id;
   v.mode = 'TASK';
   startRoute(v, wpPt(t.startLocation), t.startLocation, 'TO_START');
@@ -637,7 +691,7 @@ function readTask(body: Record<string, unknown>) {
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   const start = wpByName(body.startLocation as string)?.name;
   const target = wpByName(body.targetLocation as string)?.name;
-  return { title, start, target, priority: Number(body.priority ?? 0), scheduledAt: (body.scheduledAt as string | null) ?? null };
+  return { title, start, target, priority: Number(body.priority ?? 0), scheduledAt: (body.scheduledAt as string | null) ?? null, autoAssign: body.autoAssign !== false };
 }
 
 // ---------------------------------------------------------------
@@ -915,7 +969,7 @@ function route(method: string, path: string, params: Record<string, unknown>, bo
       return ok(vehicleJson(v));
     }
     case 'GET /tasks':
-      return ok(tasks);
+      return ok(tasks.map((t) => ({ ...t, autoDispatchNote: t.status === 'PENDING' ? (autoNotes.get(t.id) ?? null) : null })));
     case 'GET /tasks/:id': {
       const t = tasks.find((x) => x.id === id);
       return t ? ok(t) : fail(404, 'タスクが見つかりません');
@@ -925,6 +979,7 @@ function route(method: string, path: string, params: Record<string, unknown>, bo
       if (!d.title || !d.start || !d.target) return fail(400, 'タイトル・出発地・目的地を入力してください（地点は一覧にあるものだけ使えます）');
       const t = makeTask(d.title, d.start, d.target, d.priority);
       t.scheduledAt = d.scheduledAt;
+      t.autoAssign = d.autoAssign;
       t.createdByUser = { username: 'demo' };
       tasks.unshift(t);
       fire('tasks:changed');
@@ -938,7 +993,7 @@ function route(method: string, path: string, params: Record<string, unknown>, bo
       if (t.status !== 'PENDING') return fail(409, '配車済みのタスクは内容を編集できません');
       const d = readTask(body);
       if (!d.title || !d.start || !d.target) return fail(400, 'タイトル・出発地・目的地を入力してください（地点は一覧にあるものだけ使えます）');
-      Object.assign(t, { title: d.title, startLocation: d.start, targetLocation: d.target, priority: d.priority, scheduledAt: d.scheduledAt });
+      Object.assign(t, { title: d.title, startLocation: d.start, targetLocation: d.target, priority: d.priority, scheduledAt: d.scheduledAt, autoAssign: d.autoAssign });
       fire('tasks:changed');
       return ok(t);
     }

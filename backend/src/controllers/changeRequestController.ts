@@ -8,6 +8,8 @@ import { prisma } from '../config/database';
 import { socketService } from '../services/socketService';
 import { DEFAULT_MAP_ID, isMapId, MAP_SETTING_KEY, mqttService } from '../services/mqttService';
 import { loadOpsSettings } from './settingsController';
+import { AUTO_DISPATCH_DEFAULT, AUTO_DISPATCH_KEY } from '../services/autoDispatchService';
+import { requestDispatch } from '../services/dispatchTrigger';
 
 type Item = {
   label: string;
@@ -29,6 +31,9 @@ export const SETTING_ITEMS: Record<string, Item> = {
   keepout: { label: '立入禁止エリアの追加・削除', rank: 3, dbKey: 'map.keepout_zones', def: '未設定' },
   // 変更すると全車両の地図が切り替わる（mqttService.publishActiveMap。車両は止まってから切り替える）
   map: { label: '使用する地図の切り替え', rank: 2, dbKey: MAP_SETTING_KEY, def: DEFAULT_MAP_ID },
+  // ON にすると、割り当て待ちのタスクを出発地に一番近い空き車両へ自動で割り当てる（autoDispatchService.ts）
+  // 【仮】ランクは setting_classification.xlsx にまだ無いので仮に L2
+  autoDispatch: { label: '自動割り当て', rank: 2, dbKey: AUTO_DISPATCH_KEY, def: AUTO_DISPATCH_DEFAULT },
 };
 
 // 必要な承認の人数（申請者以外の管理者）
@@ -51,6 +56,7 @@ async function checkValue(key: string, raw: string): Promise<string | null> {
   if (!raw) return '希望する値を入力してください';
   if (raw.length > 500) return '内容が長すぎます（500文字まで）';
   if (key === 'map' && !isMapId(raw)) return '地図の名前は英数字・「_」「-」で入力してください（例: warehouse_a）';
+  if (key === 'autoDispatch' && raw !== 'ON' && raw !== 'OFF') return '自動割り当ては ON か OFF です';
   if (!item.num) return null;
   const n = Number(raw);
   if (!Number.isFinite(n) || (item.num.int && !Number.isInteger(n))) return `${item.label}は${item.num.int ? '整数' : '数値'}で入力してください`;
@@ -78,6 +84,7 @@ async function writeSetting(tx: Prisma.TransactionClient, key: string, value: st
 async function broadcastSettings() {
   const [ops, values] = await Promise.all([loadOpsSettings(), loadSettingValues()]);
   socketService.broadcastSettingsChanged({ ops, values });
+  requestDispatch('設定の変更'); // 自動割り当ての ON/OFF・電池のしきい値・地図が変わったかもしれない
 }
 
 const withReviews = { reviews: { orderBy: { createdAt: 'asc' } } } satisfies Prisma.SettingChangeRequestInclude;

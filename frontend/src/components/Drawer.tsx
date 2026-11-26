@@ -239,6 +239,7 @@ function TaskBody({ id }: { id: string }) {
               ),
             ],
             ['予定日時', fmtDT(t.scheduledAt)],
+            ['自動割り当て', t.autoAssign ? (t.status === 'PENDING' && t.autoNote ? `対象（${t.autoNote}）` : '対象') : '対象外（人が割り当てる）'],
             ['作成', `${t.createdBy} ・ ${fmtDT(t.createdAt)}`],
             ['開始', fmtDT(t.startedAt)],
             ['終了', fmtDT(t.completedAt)],

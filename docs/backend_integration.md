@@ -148,6 +148,27 @@ import { taskProgressService } from './taskProgressService';   // ★追加
 
 ---
 
+## ④ 自動割り当て
+
+割り当て待ち（PENDING）のタスクを、**出発地に一番近い空き車両**へ自動で割り当てます。既定は OFF です。
+
+- **ON/OFF**：設定「自動割り当て」（`system_settings` の `dispatch.auto_enabled` = `ON` / `OFF`）。【仮】ランクは L2
+- **タスクごと**：作成・編集の画面の「自動割り当ての対象にする」（`tasks.auto_assign`、既定は true）。外したタスクは人が割り当てる
+- **いつ動くか**：3 秒ごとの見回り ＋ タスクの作成・更新・中止・終了、車両の状態の変化、手動操縦の終了、設定の変更のたび（`dispatchTrigger.ts` の `requestDispatch`）
+- **決め方**（`autoDispatchPlan.ts`）：優先度の高い順 → 予定日時の早い順 → 作成の古い順に、出発地まで直線距離で一番近い車両。距離が同じなら電池の多い方。1台に1タスク
+  - 予定日時があるタスクは、その時刻になってから
+  - 使わない車両：オフライン・異常・緊急停止中（Web から止めた直後で DB がまだ IDLE のときも）・別のタスクを実行中・手動操縦中・電池が「割り当てない残量」未満・telemetry が 3 秒以上届いていない・走行中や地点へ移動中・充電中で「警告のしきい値」未満・別の地図にいる
+  - 割り当てる直前に、車両の行をロックしてから最新の状態でもう一度確かめる（手動の割り当ても同じ）
+  - 地点は今の地図の `config/waypoints/<地図名>.yaml`（無ければ `config/waypoints.yaml`）から引く（`waypointService.ts`。場所は `WAYPOINTS_DIR` で変えられる）
+  - MQTT ブローカーにつながっていないときは割り当てない
+- **見え方**：割り当てた理由はタスクの履歴とログに残る（例：「自動割り当て: 車両 [AGV-02] に…（Dock-B まで約 2.8 m、電池 90%）」）。割り当てていない理由は `GET /api/tasks` の `autoDispatchNote` に入り、一覧に出る
+- **API**：`GET /api/dispatch/auto`（状態）、`POST /api/dispatch/auto/run`（いますぐ1回。ADMIN・OPERATOR）
+- **中止・編集との競合**：タスクの中止・編集もタスクの行をロックしてから読み直すので、割り当てと同時に起きても「中止したのに車両が走る」ことはない
+- **二重割り当ての防止**：`dispatchService.assignTask` は車両の行をロックしてから、タスクが PENDING のまま・車両が他のタスクを持っていないときだけ書き換える（手動の割り当ても同じ）
+- バックエンドは1つだけで動かす前提（2つ以上動かすときは、見回りの順番待ちを DB のロックに替える）
+
+---
+
 ## 気づいた点（既存コード）
 
 - `mqttService.ts` の emergency 受信で `prisma.vehicle.update` を使っていますが、

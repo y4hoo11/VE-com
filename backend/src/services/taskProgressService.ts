@@ -5,6 +5,7 @@
 import { LogLevel, TaskStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { socketService } from './socketService';
+import { requestDispatch } from './dispatchTrigger';
 
 type TaskProgressMessage = {
   taskId?: unknown;
@@ -71,7 +72,10 @@ class TaskProgressService {
     await socketService.recordLog(vehicleId, level, `タスク「${task.title}」: ${label}${text ? `（${text}）` : ''}`);
 
     socketService.broadcastTasksChanged();
-    if (finished) this.lastState.delete(taskId);
+    if (finished) {
+      this.lastState.delete(taskId);
+      requestDispatch('タスクの終了'); // 車両が空いたかもしれない
+    }
   }
 
   /**

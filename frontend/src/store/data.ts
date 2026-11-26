@@ -92,6 +92,8 @@ export interface Task {
   createdBy: string;
   createdAt: number;
   scheduledAt: number | null;
+  autoAssign: boolean; // false = 自動割り当ての対象にしない（人が割り当てる）
+  autoNote: string | null; // 割り当て待ちのとき、自動割り当てがまだ割り当てていない理由
   startedAt: number | null;
   completedAt: number | null;
   progress: number | null; // ROS から進捗が届いたときだけ入る
@@ -224,6 +226,8 @@ export const SETTING_ITEMS: SettingItem[] = [
   { key: 'keepout', label: '立入禁止エリアの追加・削除', rank: 3, scope: '全車両', def: '未設定', type: 'text', placeholder: '追加・削除するエリアと、その範囲' },
   // 変更が適用されると全車両の地図が切り替わる（走行中の車両は止まってから。docs/agv_protocol.md 2-8）
   { key: 'map', label: '使用する地図の切り替え', rank: 2, scope: '全車両', def: DEFAULT_MAP_ID, type: 'select', options: MAP_IDS },
+  // ON にすると、割り当て待ちのタスクを出発地に一番近い空き車両へ自動で割り当てる。【仮】ランクは xlsx に無いので仮に L2
+  { key: 'autoDispatch', label: '自動割り当て', rank: 2, scope: '全車両', def: 'OFF', type: 'select', options: ['OFF', 'ON'] },
 ];
 export const settingItem = (key: string) => SETTING_ITEMS.find((i) => i.key === key);
 export const fmtSetting = (key: string, v: string | null | undefined) => {

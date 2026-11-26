@@ -94,6 +94,8 @@ interface ApiTask {
   startLocation: string | null;
   targetLocation: string | null;
   scheduledAt: string | null;
+  autoAssign?: boolean;
+  autoDispatchNote?: string | null;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -322,6 +324,8 @@ function toTask(a: ApiTask, prev?: Task): Task {
     createdBy: a.createdByUser?.username ?? '—',
     createdAt: ms(a.createdAt) ?? 0,
     scheduledAt: ms(a.scheduledAt),
+    autoAssign: a.autoAssign ?? true,
+    autoNote: a.autoDispatchNote ?? null,
     startedAt: ms(a.startedAt),
     completedAt: ms(a.completedAt),
     progress: a.status === 'COMPLETED' ? 100 : (prev?.progress ?? null),
@@ -968,13 +972,14 @@ export function mapModeClick(p: Pt) {
 // ---------------------------------------------------------------
 // タスク — 既存の REST API
 // ---------------------------------------------------------------
-type TaskInput = { title: string; start: string; target: string; priority: number; scheduledAt: number | null };
+type TaskInput = { title: string; start: string; target: string; priority: number; scheduledAt: number | null; autoAssign: boolean };
 const toBody = (d: TaskInput) => ({
   title: d.title,
   startLocation: d.start,
   targetLocation: d.target,
   priority: d.priority,
   scheduledAt: d.scheduledAt ? new Date(d.scheduledAt).toISOString() : null,
+  autoAssign: d.autoAssign,
 });
 
 // 作成したタスクを返す。失敗したら Error（画面にそのまま出す文言）を投げる

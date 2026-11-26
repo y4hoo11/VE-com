@@ -79,6 +79,12 @@ export function Tasks() {
                     <TChip s={t.status} />
                     {active && v?.status === 'ERROR' && <span className="ml-1 text-xs font-bold text-red-600">⚠車両異常</span>}
                     {active && v?.paused && v.status !== 'ERROR' && <span className="ml-1 text-xs text-amber-600">⏸</span>}
+                    {t.status === 'PENDING' &&
+                      (!t.autoAssign ? (
+                        <span className="ml-1 text-xs text-slate-500">手動で割り当て</span>
+                      ) : (
+                        t.autoNote && <div className="mt-0.5 text-xs text-slate-500">自動：{t.autoNote}</div>
+                      ))}
                   </td>
                   <td className="px-3 py-2">{v?.name ?? <span className="text-slate-400">—</span>}</td>
                   <td className="w-36 px-3 py-2">
