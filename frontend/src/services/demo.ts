@@ -429,6 +429,10 @@ function autoDispatch() {
         autoNotes.set(t.id, '予定日時になったら割り当てます');
         continue;
       }
+      if (!wpByName(t.startLocation) || !wpByName(t.targetLocation)) {
+        autoNotes.set(t.id, `${wpByName(t.startLocation) ? '目的地' : '出発地'}が地図 ${DEFAULT_MAP_ID} にありません`);
+        continue;
+      }
       const s = wpPt(t.startLocation);
       const free = vehicles.filter(
         (v) =>
@@ -446,8 +450,12 @@ function autoDispatch() {
         autoNotes.set(t.id, '空いている車両がありません');
         continue;
       }
+      const r = assignTask({ taskId: t.id, vehicleId: best.id }, `自動割り当て: ${best.name} に割り当てました（${t.startLocation} まで約 ${dist(best).toFixed(1)} m、電池 ${Math.round(best.battery)}%）`);
+      if (r.status >= 400) {
+        autoNotes.set(t.id, '割り当てを決め直しています'); // その車両は使わずに、次の回で決め直す
+        continue;
+      }
       used.add(best.id);
-      assignTask({ taskId: t.id, vehicleId: best.id }, `自動割り当て: ${best.name} に割り当てました（${t.startLocation} まで約 ${dist(best).toFixed(1)} m、電池 ${Math.round(best.battery)}%）`);
     }
   }
   if (JSON.stringify([...autoNotes]) !== before) fire('tasks:changed');

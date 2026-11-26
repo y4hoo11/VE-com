@@ -8,9 +8,10 @@
 import { LogLevel, TaskStatus } from '@prisma/client';
 import { prisma } from '../config/database';
 import { loadOpsSettings } from '../controllers/settingsController';
-import { planAssignments } from './autoDispatchPlan';
+import { planAssignments, vehicleBlocker, type PlanContext } from './autoDispatchPlan';
 import { AssignConflictError, dispatchService } from './dispatchService';
 import { onDispatchRequest } from './dispatchTrigger';
+import { emergencyState } from './emergencyState';
 import { manualDriveService } from './manualDriveService';
 import { DEFAULT_MAP_ID, MAP_SETTING_KEY, mqttService } from './mqttService';
 import { socketService } from './socketService';
@@ -19,6 +20,8 @@ import { waypointService } from './waypointService';
 export const AUTO_DISPATCH_KEY = 'dispatch.auto_enabled'; // 値は ON / OFF
 export const AUTO_DISPATCH_DEFAULT = 'OFF';
 const INTERVAL_MS = Number(process.env.AUTO_DISPATCH_INTERVAL_MS) || 3000;
+// これより長く telemetry が届いていない車両には自動で割り当てない（PC1 は 2Hz、ラズパイは 1Hz。オフライン判定は 5 秒）
+const HEARTBEAT_MAX_AGE_MS = 3000;
 
 class AutoDispatchService {
   private timer: NodeJS.Timeout | null = null;
@@ -54,6 +57,8 @@ class AutoDispatchService {
       return await this.runOnce();
     } finally {
       this.running = false;
+      // 走っている間に頼まれた分（と、競合で決め直す分）を取りこぼさない
+      if (this.again) this.kick('もう一度');
     }
   }
 
@@ -121,7 +126,7 @@ class AutoDispatchService {
     }
 
     const [vehicles, busyRows, ops, mapRow] = await Promise.all([
-      prisma.vehicle.findMany({ select: { id: true, status: true, batteryLevel: true, currentX: true, currentY: true, currentMapId: true } }),
+      prisma.vehicle.findMany({ select: { id: true, status: true, batteryLevel: true, currentX: true, currentY: true, currentMapId: true, lastHeartbeat: true } }),
       prisma.task.findMany({
         where: { status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] }, assignedVehicleId: { not: null } },
         select: { assignedVehicleId: true },
@@ -132,16 +137,31 @@ class AutoDispatchService {
     const activeMapId = mapRow?.value || DEFAULT_MAP_ID;
     const ids = vehicles.map((v) => v.id);
 
-    const plan = planAssignments(tasks, vehicles, {
+    const ctx: PlanContext = {
       now: new Date(),
       battMin: ops.battMin,
       battWarn: ops.battWarn,
       activeMapId,
       busyVehicleIds: new Set(busyRows.map((r) => r.assignedVehicleId!)),
       manualVehicleIds: new Set(ids.filter((id) => manualDriveService.isDriving(id))),
+      emergencyVehicleIds: new Set(ids.filter((id) => emergencyState.hasLatched(id))),
       movingVehicleIds: new Set(ids.filter((id) => mqttService.hasPendingMove(id) === true)),
+      heartbeatMaxAgeMs: HEARTBEAT_MAX_AGE_MS,
       resolve: (name) => waypointService.find(activeMapId, name),
-    });
+    };
+    const plan = planAssignments(tasks, vehicles, ctx);
+    // 割り当てる直前（車両をロックしたあと）に、最新の車両と今の状態で確かめ直す。「別のタスクを実行中」は assignTask が見る
+    const recheck = (id: string) => {
+      const live: PlanContext = {
+        ...ctx,
+        now: new Date(),
+        busyVehicleIds: new Set(),
+        manualVehicleIds: new Set(manualDriveService.isDriving(id) ? [id] : []),
+        emergencyVehicleIds: new Set(emergencyState.hasLatched(id) ? [id] : []),
+        movingVehicleIds: new Set(mqttService.hasPendingMove(id) === true ? [id] : []),
+      };
+      return (v: Parameters<typeof vehicleBlocker>[0]) => vehicleBlocker(v, live, live);
+    };
 
     let assigned = 0;
     for (const a of plan.assignments) {
@@ -149,7 +169,7 @@ class AutoDispatchService {
       const v = vehicles.find((x) => x.id === a.vehicleId)!;
       const reason = `${t.startLocation} まで約 ${a.distance.toFixed(1)} m、電池 ${v.batteryLevel}%`;
       try {
-        await dispatchService.assignTask(a.taskId, a.vehicleId, { source: 'auto', reason });
+        await dispatchService.assignTask(a.taskId, a.vehicleId, { source: 'auto', reason, check: recheck(a.vehicleId) });
         assigned++;
       } catch (e) {
         if (e instanceof AssignConflictError) {

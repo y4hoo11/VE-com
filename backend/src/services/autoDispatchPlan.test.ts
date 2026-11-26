@@ -18,7 +18,9 @@ const ctx = (over: Partial<PlanContext> = {}): PlanContext => ({
   activeMapId: 'demo_map',
   busyVehicleIds: new Set(),
   manualVehicleIds: new Set(),
+  emergencyVehicleIds: new Set(),
   movingVehicleIds: new Set(),
+  heartbeatMaxAgeMs: 3000,
   resolve: (n) => (n ? POINTS[n] ?? null : null),
   ...over,
 });
@@ -30,6 +32,7 @@ const veh = (id: string, x: number, y: number, over: Partial<PlanVehicle> = {}):
   currentX: x,
   currentY: y,
   currentMapId: 'demo_map',
+  lastHeartbeat: new Date(NOW.getTime() - 500),
   ...over,
 });
 
@@ -100,7 +103,7 @@ test('距離が同じなら電池の多い車両', () => {
 });
 
 test('自動割り当てでは使わない車両', () => {
-  const c = ctx({ busyVehicleIds: new Set(['busy']), manualVehicleIds: new Set(['manual']), movingVehicleIds: new Set(['goto']) });
+  const c = ctx({ busyVehicleIds: new Set(['busy']), manualVehicleIds: new Set(['manual']), movingVehicleIds: new Set(['goto']), emergencyVehicleIds: new Set(['estop']) });
   const cases: [PlanVehicle, RegExp][] = [
     [veh('off', 0, 0, { status: VehicleStatus.OFFLINE }), /オフライン/],
     [veh('err', 0, 0, { status: VehicleStatus.ERROR }), /異常/],
@@ -111,6 +114,9 @@ test('自動割り当てでは使わない車両', () => {
     [veh('empty', 0, 0, { batteryLevel: 19 }), /電池残量が 20%/],
     [veh('charging', 0, 0, { status: VehicleStatus.CHARGING, batteryLevel: 25 }), /充電中/],
     [veh('other-map', 0, 0, { currentMapId: 'warehouse_a' }), /別の地図/],
+    [veh('estop', 0, 0), /緊急停止中/], // Web から止めた直後（DB はまだ IDLE）
+    [veh('silent', 0, 0, { lastHeartbeat: new Date(NOW.getTime() - 4000) }), /通信が途切れている/],
+    [veh('never', 0, 0, { lastHeartbeat: null }), /通信が途切れている/],
   ];
   for (const [v, why] of cases) assert.match(vehicleBlocker(v, c, c) ?? '', why, v.id);
 });
@@ -121,8 +127,14 @@ test('充電中でも警告のしきい値以上なら使う。地図を知ら�
   assert.equal(vehicleBlocker(veh('nomap', 0, 0, { currentMapId: null }), c, c), null);
 });
 
-test('手動の割り当て（auto なし）では、走行中・充電中・別の地図は止めない', () => {
+test('手動の割り当てでも、緊急停止中の車両には割り当てない', () => {
+  const c = ctx({ emergencyVehicleIds: new Set(['estop']) });
+  assert.equal(vehicleBlocker(veh('estop', 0, 0), c), '緊急停止中');
+});
+
+test('手動の割り当て（auto なし）では、走行中・充電中・別の地図・telemetry の途切れは止めない', () => {
   const c = ctx();
+  assert.equal(vehicleBlocker(veh('silent', 0, 0, { lastHeartbeat: null }), c), null);
   assert.equal(vehicleBlocker(veh('run', 0, 0, { status: VehicleStatus.RUNNING }), c), null);
   assert.equal(vehicleBlocker(veh('charging', 0, 0, { status: VehicleStatus.CHARGING, batteryLevel: 25 }), c), null);
   assert.equal(vehicleBlocker(veh('other-map', 0, 0, { currentMapId: 'warehouse_a' }), c), null);

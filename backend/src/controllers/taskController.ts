@@ -5,6 +5,7 @@ import { AssignConflictError, dispatchService } from '../services/dispatchServic
 import { socketService } from '../services/socketService';
 import { mqttService } from '../services/mqttService';
 import { manualDriveService } from '../services/manualDriveService';
+import { emergencyState } from '../services/emergencyState';
 import { autoDispatchService } from '../services/autoDispatchService';
 import { vehicleBlocker } from '../services/autoDispatchPlan';
 import { requestDispatch } from '../services/dispatchTrigger';
@@ -97,8 +98,14 @@ export const createTask = async (req: Request, res: Response) => {
     }
  
     const parsedScheduledAt = scheduledAt ? new Date(String(scheduledAt)) : null;
-    const validScheduledAt =
-      parsedScheduledAt && !Number.isNaN(parsedScheduledAt.getTime()) ? parsedScheduledAt : null;
+    // 形式がおかしい予定日時を黙って「無し」にすると、自動割り当てですぐ走り出してしまうので断る
+    if (parsedScheduledAt && Number.isNaN(parsedScheduledAt.getTime())) {
+      return res.status(400).json({ error: '予定日時 (scheduledAt) の形式が不正です' });
+    }
+    const validScheduledAt = parsedScheduledAt;
+    if (autoAssign !== undefined && typeof autoAssign !== 'boolean') {
+      return res.status(400).json({ error: 'autoAssign は true か false です' });
+    }
  
     // トランザクションでタスク作成と履歴記録をアトミックに実行
     const result = await prisma.$transaction(async (tx) => {
@@ -109,7 +116,7 @@ export const createTask = async (req: Request, res: Response) => {
           targetLocation: tLocation,
           priority: normalizePriority(priority),
           scheduledAt: validScheduledAt,
-          autoAssign: autoAssign !== false, // 送られてこなければ自動割り当ての対象
+          autoAssign: autoAssign ?? true, // 送られてこなければ自動割り当ての対象
           createdByUserId: userId,
           status: TaskStatus.PENDING,
         },
@@ -147,6 +154,8 @@ export const deleteTask = async (req: Request, res: Response) => {
     }
 
     const outcome = await prisma.$transaction(async (tx) => {
+      // 自動割り当てと同時に起きても、どちらかが終わってから最新の状態で進める（割り当ても同じ行を書き換える）
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${taskId} FOR UPDATE`;
       const task = await tx.task.findUnique({ where: { id: taskId } });
 
       if (!task) return { kind: 'not_found' as const };
@@ -289,16 +298,19 @@ export const assignTask = async (req: Request, res: Response) => {
     const busy = await prisma.task.count({
       where: { assignedVehicleId: vId, status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] } },
     });
-    const ng = vehicleBlocker(v, {
+    const blockerCtx = (busyIds: string[]) => ({
       battMin: ops.battMin,
-      busyVehicleIds: new Set(busy > 0 ? [vId] : []),
+      busyVehicleIds: new Set(busyIds),
       manualVehicleIds: new Set(manualDriveService.isDriving(vId) ? [vId] : []),
+      emergencyVehicleIds: new Set(emergencyState.hasLatched(vId) ? [vId] : []),
     });
+    const ng = vehicleBlocker(v, blockerCtx(busy > 0 ? [vId] : []));
     if (ng) {
       return res.status(409).json({ error: `この車両は${ng}のため割り当てられません` });
     }
 
-    const updatedTask = await dispatchService.assignTask(tId, vId, { source: 'manual' });
+    // 「別のタスクを実行中」は assignTask の中で確かめるので、ここでは空にして渡す
+    const updatedTask = await dispatchService.assignTask(tId, vId, { source: 'manual', check: (fresh) => vehicleBlocker(fresh, blockerCtx([])) });
     res.json(updatedTask);
   } catch (error) {
     // 確かめたあとに、別の割り当て・中止が先に通った
@@ -379,6 +391,8 @@ export const updateTask = async (req: Request, res: Response) => {
     }
 
     const outcome = await prisma.$transaction(async (tx) => {
+      // 自動割り当てと同時に起きても、どちらかが終わってから最新の状態で進める（割り当ても同じ行を書き換える）
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${taskId} FOR UPDATE`;
       const task = await tx.task.findUnique({ where: { id: taskId } });
       if (!task) return { kind: 'not_found' as const };
 

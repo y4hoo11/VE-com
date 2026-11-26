@@ -16,6 +16,7 @@ export interface PlanVehicle {
   currentX: number;
   currentY: number;
   currentMapId: string | null;
+  lastHeartbeat: Date | null;
 }
 
 export interface PlanTask {
@@ -31,6 +32,8 @@ export interface BlockerContext {
   battMin: number; // これ未満の電池残量の車両には割り当てない
   busyVehicleIds: ReadonlySet<string>; // ASSIGNED / IN_PROGRESS のタスクを持っている車両
   manualVehicleIds: ReadonlySet<string>; // 手動操縦中の車両
+  // 解除が必要な緊急停止を覚えている車両（Web から止めた直後は、ROS から ERROR が返るまで DB の status は変わらない）
+  emergencyVehicleIds: ReadonlySet<string>;
 }
 
 export interface PlanContext extends BlockerContext {
@@ -38,6 +41,7 @@ export interface PlanContext extends BlockerContext {
   battWarn: number; // 充電中の車両は、これ以上たまっていれば使う
   activeMapId: string; // 全車両が使っている地図（設定「使用する地図の切り替え」）
   movingVehicleIds: ReadonlySet<string>; // 地点へ移動・ホームへ戻るなど、タスクでない移動の途中の車両
+  heartbeatMaxAgeMs: number; // これより長く telemetry が届いていない車両は使わない（オフライン判定の 5 秒より前に避ける）
   resolve: (name: string | null) => Point | null; // 地点名 → 座標（今の地図で）
 }
 
@@ -55,16 +59,19 @@ export interface PlanResult {
 /**
  * その車両に割り当てられない理由。割り当てられるなら null。
  * auto = true のとき（自動割り当て）は、人なら判断できる場合も避ける：
- * 走行中・移動中・充電がたまっていない・別の地図にいる
+ * 走行中・移動中・充電がたまっていない・別の地図にいる・telemetry が途切れている
  */
 export function vehicleBlocker(v: PlanVehicle, ctx: BlockerContext, auto?: PlanContext): string | null {
   if (v.status === VehicleStatus.OFFLINE) return 'オフライン';
   if (v.status === VehicleStatus.ERROR) return '異常中';
+  if (ctx.emergencyVehicleIds.has(v.id)) return '緊急停止中';
   if (ctx.busyVehicleIds.has(v.id)) return '別のタスクを実行中';
   if (ctx.manualVehicleIds.has(v.id)) return '手動操縦中';
   if (v.batteryLevel < ctx.battMin) return `電池残量が ${ctx.battMin}% 未満`;
   if (!auto) return null;
 
+  const age = v.lastHeartbeat ? auto.now.getTime() - v.lastHeartbeat.getTime() : Infinity;
+  if (age > auto.heartbeatMaxAgeMs) return '通信が途切れている';
   if (v.status === VehicleStatus.RUNNING || auto.movingVehicleIds.has(v.id)) return '移動中';
   if (v.status === VehicleStatus.CHARGING && v.batteryLevel < auto.battWarn) return `充電中（${auto.battWarn}% 未満）`;
   // 地図を知らせてこない車両（ラズパイだけで動かしているときなど）は、今の地図にいるものとみなす

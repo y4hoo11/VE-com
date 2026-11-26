@@ -1,7 +1,7 @@
 import { mqttService } from './mqttService';
 import { socketService } from './socketService';
 import { prisma } from '../config/database';
-import { TaskStatus, VehicleStatus, LogLevel, type Task } from '@prisma/client';
+import { TaskStatus, VehicleStatus, LogLevel, type Task, type Vehicle } from '@prisma/client';
 
 export type AssignSource = 'manual' | 'auto';
 
@@ -13,9 +13,15 @@ class DispatchService {
    * 指定したタスクを車両に割り当てて配車指示を出す。
    * 手動の割り当てと自動割り当てが同時に走っても、1つのタスクに2台・1台に2タスクにならないように、
    * 車両の行をロックしてから「タスクが PENDING のまま」「車両が他のタスクを持っていない」ときだけ書き換える。
-   * 間に合わなかったら AssignConflictError
+   * 間に合わなかったら AssignConflictError。
+   * check … ロックしたあとの最新の車両で、割り当ててよいかをもう一度確かめる（だめなら理由を返す）。
+   *         確かめてからここまでの間に、異常・オフライン・手動操縦・緊急停止になっていることがあるため
    */
-  async assignTask(taskId: string, vehicleId: string, opts: { source?: AssignSource; reason?: string } = {}): Promise<Task> {
+  async assignTask(
+    taskId: string,
+    vehicleId: string,
+    opts: { source?: AssignSource; reason?: string; check?: (vehicle: Vehicle) => string | null } = {},
+  ): Promise<Task> {
     const source = opts.source ?? 'manual';
     const how = source === 'auto' ? '自動割り当て' : '割り当て';
     const why = opts.reason ? `（${opts.reason}）` : '';
@@ -25,6 +31,9 @@ class DispatchService {
       // 同じ車両への割り当てを1つずつにする（このトランザクションが終わるまで、ほかは待つ）
       const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM vehicles WHERE id = ${vehicleId} FOR UPDATE`;
       if (locked.length === 0) throw new AssignConflictError('車両が見つかりません');
+      const vehicle = await tx.vehicle.findUniqueOrThrow({ where: { id: vehicleId } });
+      const ng = opts.check?.(vehicle);
+      if (ng) throw new AssignConflictError(`この車両は${ng}のため割り当てられません`);
 
       const busy = await tx.task.count({
         where: { assignedVehicleId: vehicleId, status: { in: [TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS] } },
