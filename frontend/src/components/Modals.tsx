@@ -134,7 +134,11 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
   const [target, setTarget] = useState(t?.target ?? 'Station-1');
   const [priority, setPriority] = useState(t?.priority ?? 3);
   const [sched, setSched] = useState(toLocalInput(t?.scheduledAt ?? null));
-  const [assignNext, setAssignNext] = useState(true);
+  const [autoAssign, setAutoAssign] = useState(t?.autoAssign ?? true);
+  const autoOn = S.values.autoDispatch === 'ON'; // 設定「自動割り当て」
+  const [assignNext, setAssignNext] = useState(!autoOn);
+  // 自動割り当てに任せるときは、作成のあとに割り当て画面を開かない
+  const openAssign = assignNext && !(autoOn && autoAssign);
   const [error, setError] = useState('');
 
   const [busy, setBusy] = useState(false);
@@ -142,7 +146,7 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
     if (busy) return;
     if (!title.trim()) return setError('タイトルを入力してください');
     if (start === target) return setError('出発地と目的地が同じです');
-    const d = { title: title.trim(), start, target, priority, scheduledAt: sched ? new Date(sched).getTime() : null };
+    const d = { title: title.trim(), start, target, priority, scheduledAt: sched ? new Date(sched).getTime() : null, autoAssign };
     if (mode === 'edit' && taskId) {
       closeModal();
       await updateTask(taskId, d);
@@ -151,9 +155,9 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
     setBusy(true);
     try {
       const nt = await createTask(d);
-      if (assignNext) openModal({ kind: 'assign', taskId: nt.id, fromCreate: true });
+      if (openAssign) openModal({ kind: 'assign', taskId: nt.id, fromCreate: true });
       else {
-        toast(`${nt.no} を作成しました（未割当）`, 'ok');
+        toast(autoOn && autoAssign ? `${nt.no} を作成しました（空いている車両に自動で割り当てます）` : `${nt.no} を作成しました（未割当）`, 'ok');
         closeModal();
       }
     } catch (e) {
@@ -176,7 +180,7 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
         <>
           <Btn onClick={closeModal}>キャンセル</Btn>
           <Btn variant="pri" disabled={busy} onClick={submit}>
-            {mode === 'edit' ? '保存' : assignNext ? '作成して割り当てる' : '作成'}
+            {mode === 'edit' ? '保存' : openAssign ? '作成して割り当てる' : '作成'}
           </Btn>
         </>
       }
@@ -215,7 +219,18 @@ function TaskFormModal({ mode, taskId }: { mode: 'create' | 'edit'; taskId?: str
       <Field label="予定日時" opt>
         <input type="datetime-local" className={inputCls} value={sched} onChange={(e) => setSched(e.target.value)} />
       </Field>
-      {mode === 'create' && (
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-0.5" checked={autoAssign} onChange={(e) => setAutoAssign(e.target.checked)} />
+        <span>
+          自動割り当ての対象にする
+          <span className="block text-xs text-slate-500">
+            {autoOn
+              ? '予定日時になったら（無ければすぐ）、出発地に一番近い空き車両へ割り当てます'
+              : '設定「自動割り当て」が OFF のため、今は自動では割り当てません'}
+          </span>
+        </span>
+      </label>
+      {mode === 'create' && !(autoOn && autoAssign) && (
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={assignNext} onChange={(e) => setAssignNext(e.target.checked)} />
           作成したら、続けて車両を割り当てる
